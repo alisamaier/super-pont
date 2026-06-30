@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: superpont
+      POSTGRES_USER: superpont
+      POSTGRES_PASSWORD: superpont
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U superpont -d superpont"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: gradle:8.12.1-jdk21-alpine
+    working_dir: /app
+    command: gradle bootRun --no-daemon
+    volumes:
+      - ./backend:/app
+      - gradle_cache:/home/gradle/.gradle
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/superpont
+      SPRING_DATASOURCE_USERNAME: superpont
+      SPRING_DATASOURCE_PASSWORD: superpont
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8080
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  gradle_cache:
+  frontend_node_modules:
