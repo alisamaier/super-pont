@@ -1,0 +1,10 @@
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/devdata
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://127.0.0.1:5433/superpont}
+    username: ${DATABASE_USERNAME:superpont}
+    password: ${DATABASE_PASSWORD}
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}

@@ -1,17 +1,47 @@
 spring:
   application:
     name: super-pont-backend
+  datasource:
+    url: ${DATABASE_URL}
+    username: ${DATABASE_USERNAME}
+    password: ${DATABASE_PASSWORD}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 0
+      connection-timeout: 30000
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    deserialization:
+      accept-float-as-int: false
+
+app:
+  frontend-url: ${FRONTEND_URL}
 
 management:
   endpoints:
     web:
+      cors:
+        allowed-origins: ${app.frontend-url}
+        allowed-methods: GET,HEAD,OPTIONS
       exposure:
         include: health
   endpoint:
     health:
+      show-details: never
       probes:
         enabled: true
 
 server:
-  port: 8080
+  port: ${PORT:8080}
+  address: 0.0.0.0
+  shutdown: graceful
+  forward-headers-strategy: framework
 

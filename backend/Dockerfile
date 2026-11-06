@@ -1,17 +1,20 @@
-FROM gradle:8.12.1-jdk21-alpine AS build
+FROM eclipse-temurin:25-jdk-jammy AS build
 WORKDIR /app
 
-COPY settings.gradle build.gradle ./
+COPY gradlew settings.gradle build.gradle ./
+COPY gradle ./gradle
+RUN chmod +x gradlew
 COPY src ./src
-RUN gradle clean bootJar --no-daemon
+RUN ./gradlew build --no-daemon
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-jammy
 WORKDIR /app
 
-RUN addgroup -S spring && adduser -S spring -G spring
+RUN groupadd --system spring && useradd --system --gid spring spring
+COPY --from=build --chown=spring:spring /app/build/libs/app.jar app.jar
 USER spring:spring
 
-COPY --from=build /app/build/libs/*.jar app.jar
+ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError"
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
