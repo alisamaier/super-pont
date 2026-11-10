@@ -6,3 +6,9 @@ spring:
 
 app:
   frontend-url: https://frontend.example.test
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: false

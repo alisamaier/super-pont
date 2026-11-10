@@ -84,6 +84,24 @@ Spring already allows the exact origin in `FRONTEND_URL`; for the default Vite
 URL use `http://localhost:5173`. If you change the frontend hostname or port,
 update `FRONTEND_URL` and restart the backend. No Vite proxy is needed.
 
+## Test accounts locally
+
+1. Start the stack and open Super Pont at `http://localhost:5173`. Use
+   `localhost` for both the frontend and API.
+2. Click **Cont nou**. Register with a unique username and email and a password
+   of at least eight characters and at most 72 UTF-8 bytes. Confirm the app
+   opens the sign-in page with the username filled in.
+3. Sign in with that username and password. The username appears in the header
+   and persists when you reload. In the browser network panel, `GET /api/users/me`
+   returns the profile and the API sets an HttpOnly `JSESSIONID` cookie.
+4. Click **Deconectare**. Reload and confirm the account links return. A request
+   to `GET /api/users/me` now returns `401`, and the football schedule still loads.
+5. Try registering the same username or email with different capitalization,
+   or signing in with a wrong password. The form should display an error.
+
+See the [authentication API](backend/README.md#authentication) for CSRF headers,
+status codes, and local admin setup.
+
 ## Build and verification
 
 With the frontend environment configured as above:
@@ -126,6 +144,9 @@ so local development defaults are disabled.
 | `DATABASE_PASSWORD` | Neon role password, stored only in Render |
 | `FRONTEND_URL` | Exact frontend HTTPS origin, without a trailing slash or path |
 | `PORT` | Supplied by Render; defaults to 8080 |
+| `SESSION_COOKIE_SECURE` | Defaults to `true`. The local `dev` profile defaults to `false` for HTTP. |
+| `SESSION_COOKIE_SAME_SITE` | Defaults to `lax`. |
+| `AUTH_TRUSTED_PROXY_CIDRS` | Optional comma-separated CIDRs for explicitly trusted reverse proxies. By default, forwarding headers are ignored. |
 
 The database URL must be JDBC format, not a `postgresql://user:password@...` URI.
 Keep credentials in the separate variables. PostgreSQL TLS verifies the server
@@ -137,6 +158,17 @@ Set `VITE_API_URL` in Vercel to the public HTTPS origin of the Render backend.
 Vite embeds it at build time, so changing it requires a rebuild.
 All `VITE_*` values are public browser configuration: never put secrets there.
 A missing API URL fails the frontend build.
+
+For production sign-in, configure HTTPS custom domains on the same site, such
+as `app.example.com` on Vercel and `api.example.com` on Render. Point
+`VITE_API_URL` and `FRONTEND_URL` at those origins. The default Vercel and Render
+hostnames are cross-site. Setting `SESSION_COOKIE_SAME_SITE=none` with Secure
+cookies allows cross-site sessions only in browsers that accept third-party
+cookies for that deployment.
+
+The authentication rate limiter uses in-memory counters per backend instance.
+See the [API guide](backend/README.md#authentication-rate-limits) for proxy
+configuration and limits when deploying multiple instances.
 
 ## Deployment instructions (when ready)
 

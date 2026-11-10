@@ -52,6 +52,33 @@ class DeploymentTests {
     }
 
     @Test
+    void permitsCredentialedAuthPreflightOnlyForTheConfiguredOrigin() throws Exception {
+        try (var client = HttpClient.newHttpClient()) {
+            for (String origin : new String[]{"https://frontend.example.test", "https://untrusted.example.test"}) {
+                var request = HttpRequest.newBuilder(
+                                URI.create("http://localhost:" + port + "/api/auth/login"))
+                        .header("Origin", origin)
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "Content-Type,X-CSRF-TOKEN")
+                        .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
+                        .build();
+                var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                if (origin.equals("https://frontend.example.test")) {
+                    assertThat(response.statusCode()).isEqualTo(200);
+                    assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).contains(origin);
+                    assertThat(response.headers().firstValue("Access-Control-Allow-Credentials")).contains("true");
+                    assertThat(response.headers().firstValue("Access-Control-Allow-Headers"))
+                            .hasValueSatisfying(value -> assertThat(value).containsIgnoringCase("X-CSRF-TOKEN"));
+                } else {
+                    assertThat(response.statusCode()).isEqualTo(403);
+                    assertThat(response.headers().firstValue("Access-Control-Allow-Origin")).isEmpty();
+                    assertThat(response.headers().firstValue("Access-Control-Allow-Credentials")).isEmpty();
+                }
+            }
+        }
+    }
+
+    @Test
     void unconfiguredOriginIsRejected() throws Exception {
         var response = request("/actuator/health", "https://untrusted.example.test", true);
         assertThat(response.statusCode()).isEqualTo(403);

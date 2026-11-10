@@ -27,7 +27,11 @@ beforeEach(() => {
   fetcher
     .mockReset()
     .mockImplementation(async (input) => footballResponse(input));
-  vi.stubGlobal("fetch", fetcher);
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+    new URL(String(input)).pathname === "/api/users/me"
+      ? Promise.resolve(new Response(null, { status: 401 }))
+      : fetcher(input, init),
+  );
 });
 afterEach(() => {
   cleanup();

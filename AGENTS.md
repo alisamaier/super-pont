@@ -28,7 +28,7 @@
 - Preserve the responsive match cards and sticky ticket sidebar. Competition, season, phase and round labels come from API data; kickoff is displayed in the browser's local time.
 - `lib/predictions.ts` is the shared validator for individual saves, bulk saves and storage loading. Both prediction scores are required, each an integer **0–99** inclusive. Text input accepts ASCII digits only: no signs, whitespace, letters, decimals or scientific notation. Leading zeros are allowed and normalize to integers.
 - Predictions are browser-local under `super-pont:predictions:api-v1`, keyed by backend match UUID. Show only the selected round's entries while preserving other rounds in storage. Do not remap legacy mock IDs. Keep inline errors and explicit bulk-save results; valid drafts save while invalid or partial drafts are reported, and untouched empty matches are excluded.
-- Authentication and prediction APIs are not implemented. The frontend reads football data and saves predictions locally; do not assume server-side prediction persistence.
+- Account authentication uses an HttpOnly session cookie and session-backed CSRF tokens. Predictions remain browser-local.
 
 ## Build and test
 
@@ -40,5 +40,5 @@
 
 - Keep credentials in ignored `.env` files or provider environment settings; examples contain no secrets. Spring reads environment variables, not `.env` files directly. Use a JDBC `DATABASE_URL` with separate `DATABASE_USERNAME` and `DATABASE_PASSWORD`; retain documented TLS certificate and hostname verification for Neon.
 - `VITE_API_URL` is a public HTTP(S) backend origin without `/api`, embedded at build time. Never put secrets in `VITE_*` variables. Use HTTPS in production.
-- `FRONTEND_URL` is one exact frontend origin with no path or trailing slash. Preserve exact-origin CORS, not wildcard previews. CORS is not authorization; existing backend writes are unauthenticated.
+- `FRONTEND_URL` is one exact frontend origin with no path or trailing slash. Preserve exact-origin CORS, not wildcard previews. Football reads are public. Football writes require an ADMIN session and a valid CSRF token.
 - Keep production off the `dev` profile. Preserve the non-root runtime and health-only Actuator exposure with health details hidden. Never run tests against a production database.

@@ -2,6 +2,8 @@ package ro.superpont.football;
 
 import static org.assertj.core.api.Assertions.*;
 
+import ro.superpont.TestHttpSession;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,12 +11,12 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import ro.superpont.auth.security.AuthRateLimiter;
 
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-import java.net.URI;
-import java.net.http.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -26,28 +28,22 @@ class FootballApiTests {
     @Autowired JsonMapper mapper;
     @Autowired JdbcTemplate jdbc;
     @Autowired Flyway flyway;
+    @Autowired PasswordEncoder passwords;
+    @MockitoBean AuthRateLimiter rateLimiter;
+    TestHttpSession session;
+    String csrf;
     String country, competition, season, phase, round, home, away;
 
     record Response(int status, JsonNode body, String location) {}
 
     Response request(String method, String path, Object payload) throws Exception {
-        var builder =
-                HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api" + path));
-        if (payload == null) builder.method(method, HttpRequest.BodyPublishers.noBody());
-        else
-            builder.header("Content-Type", "application/json")
-                    .method(
-                            method,
-                            HttpRequest.BodyPublishers.ofString(
-                                    mapper.writeValueAsString(payload)));
-        try (var client = HttpClient.newHttpClient()) {
-            var response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-            return new Response(
-                    response.statusCode(),
-                    mapper.readTree(response.body()),
-                    response.headers().firstValue("Location").orElse(""));
-        }
+        var response = session.request(method, path, payload, csrf);
+        return new Response(
+                response.statusCode(),
+                mapper.readTree(response.body()),
+                response.headers().firstValue("Location").orElse(""));
     }
+
 
     String create(String path, Object body) throws Exception {
         var response = request("POST", path, body);
@@ -112,6 +108,17 @@ class FootballApiTests {
     @BeforeEach
     void setUp() throws Exception {
         int n = IDS.getAndIncrement();
+        String admin = "football-admin-" + n;
+        String password = "test-admin-password";
+        jdbc.update("""
+                INSERT INTO users (id, username, email, password_hash, role, created_at)
+                VALUES (?, ?, ?, ?, 'ADMIN', CURRENT_TIMESTAMP)
+                """, UUID.randomUUID(), admin, admin + "@example.test", passwords.encode(password));
+        session = new TestHttpSession(port, mapper);
+        var login = session.request("POST", "/auth/login",
+                Map.of("username", admin, "password", password), session.csrf());
+        assertThat(login.statusCode()).as(login.body()).isEqualTo(200);
+        csrf = session.csrf();
         String iso = "" + (char) ('A' + n / 26) + (char) ('A' + n % 26);
         country =
                 create(
@@ -140,9 +147,14 @@ class FootballApiTests {
                 .isEqualTo(200);
     }
 
+    @AfterEach
+    void closeSession() {
+        if (session != null) session.close();
+    }
+
     @Test
     void migrationsRunWithoutDevelopmentSeeds() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("1");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("2");
         assertThat(
                         jdbc.queryForObject(
                                 "SELECT COUNT(*) FROM competitions WHERE code = 'RO-SUPERLIGA'",

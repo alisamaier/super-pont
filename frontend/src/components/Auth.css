@@ -1,0 +1,127 @@
+.account-nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+  margin-left: auto;
+  color: var(--lime);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.account-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-nav a,
+.account-nav button {
+  flex-shrink: 0;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #19222e;
+  white-space: nowrap;
+}
+
+.account-nav a:hover,
+.account-nav button:hover {
+  border-color: var(--lime);
+}
+
+.auth-main {
+  display: grid;
+  place-items: start center;
+  padding-block: clamp(28px, 8vw, 88px);
+}
+
+.auth-card {
+  width: min(100%, 420px);
+  display: grid;
+  gap: 18px;
+  padding: clamp(20px, 5vw, 36px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #101620;
+  font-size: 13px;
+}
+
+.auth-card h1 {
+  font: 700 clamp(32px, 6vw, 44px) / 1 "Barlow Condensed", sans-serif;
+  text-transform: uppercase;
+}
+
+.auth-icon,
+.auth-card a {
+  color: var(--lime);
+}
+
+.auth-card a:hover {
+  text-decoration: underline;
+}
+
+.auth-card form,
+.auth-field {
+  display: grid;
+}
+
+.auth-card form {
+  gap: 16px;
+}
+
+.auth-card input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  color: inherit;
+  border: 1px solid #364354;
+  border-radius: 5px;
+  background: #0c111a;
+  font-size: 16px;
+}
+
+.auth-card input[aria-invalid="true"] {
+  border-color: var(--lime);
+}
+
+.auth-field label {
+  margin-bottom: 8px;
+}
+
+.auth-field-error {
+  color: var(--lime);
+}
+
+.auth-field-error:not(:empty),
+.auth-field small {
+  margin-top: 6px;
+}
+
+.auth-card small {
+  color: #a5b2c4;
+}
+
+.auth-error {
+  color: #ffc0c7;
+}
+
+@media (max-width: 720px) {
+  .account-nav {
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    font-size: 10px;
+    gap: 6px;
+  }
+
+  .account-name {
+    max-width: 18vw;
+  }
+
+  .account-nav a,
+  .account-nav button {
+    padding: 7px 6px;
+  }
+}

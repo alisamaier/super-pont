@@ -48,6 +48,75 @@ Without the `dev` profile, a new production database gets the schema only.
 Changing profiles does not remove data already inserted into a development
 database; use separate development and production databases.
 
+## Authentication
+
+| Method and path | Input and response |
+| --- | --- |
+| `GET /api/auth/csrf` | Starts or reuses a session and returns `headerName` and `token` (plus `parameterName`). |
+| `POST /api/auth/register` | JSON `username`, `email`, `password`. Returns `200` and a profile. Sign in separately. |
+| `POST /api/auth/login` | JSON `username`, `password`. Returns `200` and a profile, and rotates the session ID. |
+| `POST /api/auth/logout` | Invalidates the session and returns `204`. |
+| `GET /api/users/me` | Returns the signed-in profile, or `401`. |
+
+Profiles contain `id`, `username`, `email`, `role`, and `createdAt`.
+Usernames use 3–32 ASCII letters, digits, or underscores. Usernames and emails
+are stored in lowercase and are unique regardless of capitalization. Passwords
+require at least eight characters and allow up to 72 UTF-8 bytes. Accounts
+created through registration receive the `USER` role.
+
+Send the session cookie with each request. Before a POST or PUT, call the CSRF
+endpoint with the same cookie jar and send the returned token as the
+`X-CSRF-TOKEN` header. Get a fresh token after login or logout. Validation errors
+return `400`, invalid credentials return `401`, missing or invalid CSRF tokens
+return `403`, and registration conflicts return `409` with field messages under
+`errors.username` and/or `errors.email`. Both conflicts can appear in the same
+response. These field errors disclose which identifiers are already registered.
+
+### Authentication rate limits
+
+| Scope | Default and `prod` | `dev` |
+| --- | --- | --- |
+| Login per client IP | 5 per rolling minute | 10 per rolling minute |
+| Login per case-insensitive username | 5 per rolling minute | 5 per rolling minute |
+| Registration per client IP | 3 per rolling 10 minutes | 5 per rolling minute |
+
+Configure each quota with `attempts` and `window` under
+`app.auth.rate-limit.login-ip`, `app.auth.rate-limit.login-username`, or
+`app.auth.rate-limit.registration-ip`. Windows accept values such as `1m` or
+`10m`. Spring loads the development overrides from `application-dev.yml` when
+the `dev` profile is active.
+
+CSRF-valid requests count toward the IP limit before body validation. Login
+requests that pass IP and body validation also count toward the username limit,
+whether the credentials succeed or fail. Rejected requests return `429` with
+`Retry-After` in seconds. The frontend displays the wait time.
+
+Each limit keeps up to 10,000 keys in the running backend. Expired keys are
+removed as requests arrive. At capacity, new keys wait for an entry to expire.
+A restart resets the counters. Multiple backend instances have separate limits.
+For a shared limit across instances, enforce it at a trusted gateway or use a
+shared rate-limit store.
+
+The default is to use the connection peer IP. Behind a reverse proxy, set
+`AUTH_TRUSTED_PROXY_CIDRS` to the comma-separated addresses or CIDRs of proxies
+you operate or explicitly trust. The edge must sanitize client-supplied forwarding
+headers and forward the real client IP. Restrict direct access to the backend
+when deploying behind that edge. Without an allowlist, users behind the same
+proxy share its IP limit.
+
+### Football access
+
+Football reads are public. Football writes require an `ADMIN` session and a
+valid CSRF token. To create a local admin, register a user and run this SQL
+against the local development database with a database operator account:
+
+```sql
+UPDATE users SET role = 'ADMIN' WHERE username = 'local_admin';
+```
+
+Sign in again after changing the role. Sessions expire after 30 minutes of
+inactivity and are stored in the running backend instance.
+
 ## Endpoints
 
 Base path: `/api`. JSON request/response bodies use camelCase. Creation returns
@@ -110,8 +179,7 @@ replace the status and both scores together. Fractional integer fields are rejec
 Invalid requests return `400`, missing references `404`, and duplicate/database
 constraint conflicts `409`, using Problem Detail JSON. Field validation errors
 include an `errors` object. The API returns DTOs, not JPA object graphs.
-Authentication, prediction endpoints, deletion and catalog editing are outside
-this initial API version.
+Prediction endpoints, deletion and catalog editing are outside this API version.
 
 ## Tests
 

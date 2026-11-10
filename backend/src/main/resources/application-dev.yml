@@ -8,3 +8,17 @@ spring:
 
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  auth:
+    rate-limit:
+      login-ip:
+        attempts: 10
+        window: 1m
+      registration-ip:
+        attempts: 5
+        window: 1m
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: ${SESSION_COOKIE_SECURE:false}

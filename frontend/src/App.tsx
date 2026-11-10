@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   ArrowRight,
   CalendarDays,
@@ -24,9 +24,60 @@ import { PredictionSummary } from "./components/PredictionSummary";
 import { SaveReport } from "./components/SaveReport";
 import { ScheduleSelect } from "./components/ScheduleSelect";
 import type { ScoreDraft } from "./types";
+import { authErrorMessage, getCurrentUser, logout, type AuthUser } from "./api/auth";
+import { AuthPage } from "./components/AuthPage";
 import "./App.css";
+import "./components/Auth.css";
 
 function App() {
+  const [path, setPath] = useState(() => window.location.pathname);
+  const authPage = path === "/login" || path === "/register" ? path : null;
+  const [user, setUser] = useState<AuthUser | null>();
+  const [registeredUsername, setRegisteredUsername] = useState("");
+  const [signingOut, setSigningOut] = useState(false);
+
+  useEffect(() => {
+    const syncPath = () => setPath(window.location.pathname);
+    window.addEventListener("popstate", syncPath);
+    return () => window.removeEventListener("popstate", syncPath);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    getCurrentUser(controller.signal)
+      .catch(() => null)
+      .then((account) => {
+        if (!controller.signal.aborted) setUser(account);
+      });
+    return () => controller.abort();
+  }, []);
+
+  function navigate(destination: string) {
+    if (window.location.pathname !== destination) {
+      window.history.pushState(null, "", destination);
+    }
+    setPath(destination);
+  }
+
+  function followLink(event: MouseEvent<HTMLAnchorElement>, destination: string) {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigate(destination);
+  }
+
+  async function signOut() {
+    setSigningOut(true);
+    try {
+      await logout();
+      setUser(null);
+      navigate("/");
+    } catch (cause) {
+      notify(authErrorMessage(cause));
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
   const catalog = useFootballSchedule();
   const { competition, season, round, phase } = catalog;
   const fixtures = catalog.matches.data ?? [];
@@ -137,16 +188,17 @@ function App() {
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#matches">
-        Sari la meciuri
+      <a className="skip-link" href={authPage ? "#auth-content" : "#matches"}>
+        {authPage ? "Sari la cont" : "Sari la meciuri"}
       </a>
       <header className="site-header">
         <div className="header-inner">
           <a
-            href="#"
+            href="/"
             className="brand"
             aria-label="Super Pont, prima pagină"
-            onClick={() => {
+            onClick={(event) => {
+              followLink(event, "/");
               setView("all");
               setDay("all");
             }}
@@ -164,6 +216,7 @@ function App() {
               className={view === "all" ? "nav-item active" : "nav-item"}
               aria-pressed={view === "all"}
               onClick={() => {
+                navigate("/");
                 setView("all");
                 setDay("all");
               }}
@@ -175,6 +228,7 @@ function App() {
               className={view === "saved" ? "nav-item active" : "nav-item"}
               aria-pressed={view === "saved"}
               onClick={() => {
+                navigate("/");
                 setView("saved");
                 setDay("all");
               }}
@@ -183,14 +237,43 @@ function App() {
               Pronosticurile mele<span className="nav-count">{count}</span>
             </button>
           </nav>
-          <span className="demo-badge">
-            <span className="small-dot" />
-            Program
-          </span>
+          <nav className="account-nav" aria-label="Cont" aria-busy={user === undefined}>
+            {user ? (
+              <>
+                <span className="account-name" title={user.username}>{user.username}</span>
+                <button type="button" disabled={signingOut} onClick={signOut}>
+                  Deconectare
+                </button>
+              </>
+            ) : user === null && (
+              <>
+                <a href="/login" onClick={(event) => followLink(event, "/login")}>Intră în cont</a>
+                <a href="/register" onClick={(event) => followLink(event, "/register")}>Cont nou</a>
+              </>
+            )}
+          </nav>
         </div>
       </header>
 
-      <main className="main-container">
+      {authPage && (
+        <AuthPage
+          key={authPage}
+          path={authPage}
+          user={user}
+          registeredUsername={registeredUsername}
+          onNavigate={followLink}
+          onRegistered={(username) => {
+            setRegisteredUsername(username);
+            navigate("/login");
+          }}
+          onLogin={(account) => {
+            setUser(account);
+            setRegisteredUsername("");
+            navigate("/");
+          }}
+        />
+      )}
+      <main className="main-container" hidden={authPage !== null}>
         <div className="breadcrumb">
           <span>Fotbal</span>
           <ChevronRight size={12} />

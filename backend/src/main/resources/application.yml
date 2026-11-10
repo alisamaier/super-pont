@@ -24,6 +24,17 @@ spring:
 
 app:
   frontend-url: ${FRONTEND_URL}
+  auth:
+    rate-limit:
+      login-ip:
+        attempts: 5
+        window: 1m
+      registration-ip:
+        attempts: 3
+        window: 10m
+      login-username:
+        attempts: 5
+        window: 1m
 
 management:
   endpoints:
@@ -43,5 +54,16 @@ server:
   port: ${PORT:8080}
   address: 0.0.0.0
   shutdown: graceful
-  forward-headers-strategy: framework
+  forward-headers-strategy: native
+  tomcat:
+    remoteip:
+      internal-proxies: "${AUTH_TRUSTED_PROXY_CIDRS:(?!)}"
+  servlet:
+    session:
+      timeout: 30m
+      tracking-modes: cookie
+      cookie:
+        http-only: true
+        secure: ${SESSION_COOKIE_SECURE:true}
+        same-site: ${SESSION_COOKIE_SAME_SITE:lax}
 
