@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import App from "./App";
-import { footballResponse } from "./api/football.test-data";
+import { footballResponse, matches, page } from "./api/football.test-data";
 
 const account = { id: "user-id", username: "supporter", email: "fan@example.test", role: "USER" };
 const fetcher = vi.fn<typeof fetch>();
@@ -25,6 +25,10 @@ beforeEach(() => {
     switch (path) {
       case "/api/users/me":
         return signedIn ? Response.json(account) : new Response(null, { status: 401 });
+      case "/api/predictions/me":
+        return signedIn
+          ? Response.json(page([{ matchId: matches[0].id, homeScore: 2, awayScore: 1 }]))
+          : new Response(null, { status: 401 });
       case "/api/auth/csrf":
         return Response.json({ headerName: "X-CSRF-TOKEN", token: "session-csrf" });
       case "/api/auth/register":
@@ -69,6 +73,7 @@ it("registers, signs in, restores the session on reload and signs out", async ()
   const header = within(screen.getByRole("navigation", { name: "Cont" }));
   expect(await header.findByText(account.username)).toBeTruthy();
   expect(window.location.pathname).toBe("/");
+  await screen.findByRole("button", { name: "Pronostic salvat" });
   app.unmount();
   render(<App />);
   const restored = within(screen.getByRole("navigation", { name: "Cont" }));

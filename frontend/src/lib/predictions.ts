@@ -1,5 +1,4 @@
 import type { Prediction, Predictions, ScoreDraft } from "../types";
-import { isUuid } from "./uuid";
 
 export const SCORE_MIN = 0;
 export const SCORE_MAX = 99;
@@ -55,7 +54,6 @@ export function validationMessage(errors: {
     .join(" ");
 }
 
-// Saves and storage loading use the same normalization and rejection rules.
 export function validateEntries(
   entries: Record<string, unknown>,
   fixtureIds: ReadonlySet<string>,
@@ -71,20 +69,6 @@ export function validateEntries(
     else result.rejected[id] = validationMessage(errors);
   }
   return result;
-}
-
-export function readStoredPredictions(
-  raw: string | null,
-  fixtureIds?: ReadonlySet<string>,
-): SaveResult {
-  if (raw === null) return { saved: {}, rejected: {} };
-  const value: unknown = JSON.parse(raw);
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("Format de stocare invalid.");
-  return validateEntries(
-    value as Record<string, unknown>,
-    fixtureIds ?? new Set(Object.keys(value).filter(isUuid)),
-  );
 }
 
 export function pendingDrafts(

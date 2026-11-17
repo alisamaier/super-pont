@@ -1,6 +1,7 @@
 package ro.superpont.football;
 
 import static org.assertj.core.api.Assertions.*;
+import static org.mockito.Mockito.when;
 
 import ro.superpont.TestHttpSession;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -17,7 +19,12 @@ import ro.superpont.auth.security.AuthRateLimiter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -30,6 +37,7 @@ class FootballApiTests {
     @Autowired Flyway flyway;
     @Autowired PasswordEncoder passwords;
     @MockitoBean AuthRateLimiter rateLimiter;
+    @MockitoBean Clock clock;
     TestHttpSession session;
     String csrf;
     String country, competition, season, phase, round, home, away;
@@ -154,12 +162,131 @@ class FootballApiTests {
 
     @Test
     void migrationsRunWithoutDevelopmentSeeds() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("2");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("3");
         assertThat(
                         jdbc.queryForObject(
                                 "SELECT COUNT(*) FROM competitions WHERE code = 'RO-SUPERLIGA'",
                                 Long.class))
                 .isZero();
+    }
+
+    @Test
+    void predictionIsPrivateAndPersistsAcrossSessionsUntilDeleted() throws Exception {
+        when(clock.instant()).thenReturn(Instant.parse("2026-11-06T15:00:00Z"));
+        String matchId = create("/matches", match());
+        String path = "/matches/" + matchId + "/prediction";
+        String username = "fan_" + UUID.randomUUID().toString().substring(0, 8);
+        try (var fan = new TestHttpSession(port, mapper);
+                var anotherDevice = new TestHttpSession(port, mapper)) {
+            String password = "test-fan-password";
+            var login = Map.of("username", username, "password", password);
+            assertThat(fan.request("GET", "/predictions/me", null, null).statusCode()).isEqualTo(401);
+            assertThat(fan.request("PUT", path, Map.of("homeScore", 0, "awayScore", 99),
+                    fan.csrf()).statusCode()).isEqualTo(401);
+            var registered = fan.request("POST", "/auth/register",
+                    Map.of("username", username, "email", username + "@example.test", "password", password),
+                    fan.csrf());
+            assertThat(registered.statusCode()).as(registered.body()).isEqualTo(200);
+            assertThat(fan.request("POST", "/auth/login", login, fan.csrf()).statusCode()).isEqualTo(200);
+            String fanCsrf = fan.csrf();
+
+            var scores = Map.of("homeScore", 0, "awayScore", 99);
+            assertThat(fan.request("PUT", path, scores, null).statusCode()).isEqualTo(403);
+            assertThat(fan.request("DELETE", path, null, null).statusCode()).isEqualTo(403);
+            assertThat(fan.request("PUT", "/matches/" + UUID.randomUUID() + "/prediction",
+                    scores, fanCsrf).statusCode()).isEqualTo(404);
+            String otherUserId = request("GET", "/users/me", null).body().get("id").asText();
+            var created = fan.request("PUT", path,
+                    Map.of("homeScore", 0, "awayScore", 99, "userId", otherUserId), fanCsrf);
+            assertThat(created.statusCode()).as(created.body()).isEqualTo(201);
+            assertThat(created.headers().firstValue("Location")).contains("/api" + path);
+            var original = mapper.readTree(created.body());
+            assertThat(original.get("matchId").asText()).isEqualTo(matchId);
+            assertThat(original.get("homeScore").asInt()).isZero();
+            assertThat(original.get("awayScore").asInt()).isEqualTo(99);
+
+            assertThat(request("GET", "/predictions/me", null).body().get("items").size()).isZero();
+            assertThat(session.request("DELETE", path, null, csrf).statusCode()).isEqualTo(204);
+            assertThat(anotherDevice.request("POST", "/auth/login", login,
+                    anotherDevice.csrf()).statusCode()).isEqualTo(200);
+            var list = anotherDevice.request("GET", "/predictions/me?page=0&size=1", null, null);
+            assertThat(list.statusCode()).isEqualTo(200);
+            var page = mapper.readTree(list.body());
+            assertThat(page.get("totalElements").asInt()).isEqualTo(1);
+            assertThat(page.get("items").get(0)).isEqualTo(original);
+
+            when(clock.instant()).thenReturn(Instant.parse("2026-11-06T15:15:00Z"));
+            String deviceCsrf = anotherDevice.csrf();
+            var updated = anotherDevice.request("PUT", path, Map.of("homeScore", 2, "awayScore", 1), deviceCsrf);
+            assertThat(updated.statusCode()).as(updated.body()).isEqualTo(200);
+            var updatedBody = mapper.readTree(updated.body());
+            assertThat(updatedBody.get("id")).isEqualTo(original.get("id"));
+            assertThat(updatedBody.get("createdAt")).isEqualTo(original.get("createdAt"));
+            assertThat(updatedBody.get("updatedAt")).isNotEqualTo(original.get("updatedAt"));
+            assertThat(updatedBody.get("homeScore").asInt()).isEqualTo(2);
+            assertThat(updatedBody.get("awayScore").asInt()).isEqualTo(1);
+            assertThat(anotherDevice.request("DELETE", path, null, deviceCsrf).statusCode()).isEqualTo(204);
+            assertThat(fan.request("DELETE", path, null, fanCsrf).statusCode()).isEqualTo(204);
+            var afterDelete = mapper.readTree(fan.request("GET", "/predictions/me", null, null).body());
+            assertThat(afterDelete.get("totalElements").asInt()).isZero();
+        }
+    }
+
+    @Test
+    void rejectsMalformedScoresAndLocksAllWritesAtKickoff() throws Exception {
+        var kickoff = Instant.parse("2026-11-06T16:00:00Z");
+        when(clock.instant()).thenReturn(kickoff.minusSeconds(1));
+        String path = "/matches/" + create("/matches", match()) + "/prediction";
+        for (var scores : List.of(Map.of("homeScore", 1), Map.of("homeScore", 0, "awayScore", -1),
+                Map.of("homeScore", 100, "awayScore", 0), Map.of("homeScore", 1.5, "awayScore", 0),
+                Map.of("homeScore", "2", "awayScore", 0), Map.of("homeScore", 2, "awayScore", true))) {
+            assertThat(request("PUT", path, scores).status()).as("%s", scores).isEqualTo(400);
+        }
+        assertThat(request("GET", "/predictions/me?size=101", null).status()).isEqualTo(400);
+        var scores = Map.of("homeScore", 3, "awayScore", 1);
+        assertThat(request("PUT", path, scores).status()).isEqualTo(201);
+        when(clock.instant()).thenReturn(kickoff);
+        assertThat(request("PUT", path, scores).status()).isEqualTo(409);
+        assertThat(session.request("DELETE", path, null, csrf).statusCode()).isEqualTo(409);
+        var reverseFixture = match();
+        reverseFixture.put("homeTeamId", away);
+        reverseFixture.put("awayTeamId", home);
+        String another = "/matches/" + create("/matches", reverseFixture) + "/prediction";
+        assertThat(request("PUT", another, scores).status()).isEqualTo(409);
+        assertThat(request("GET", "/predictions/me", null).body().get("totalElements").asInt()).isEqualTo(1);
+    }
+
+    @Test
+    void concurrentFirstSavesCreateOnlyOnePrediction() throws Exception {
+        when(clock.instant()).thenReturn(Instant.parse("2026-11-06T15:00:00Z"));
+        String matchId = create("/matches", match());
+        String path = "/matches/" + matchId + "/prediction";
+        var start = new CountDownLatch(1);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var first = executor.submit(() -> {
+                start.await();
+                return request("PUT", path, Map.of("homeScore", 0, "awayScore", 1));
+            });
+            var second = executor.submit(() -> {
+                start.await();
+                return request("PUT", path, Map.of("homeScore", 2, "awayScore", 3));
+            });
+            start.countDown();
+            var a = first.get(10, TimeUnit.SECONDS);
+            var b = second.get(10, TimeUnit.SECONDS);
+            assertThat(List.of(a.status(), b.status())).containsExactlyInAnyOrder(200, 201);
+            assertThat(a.body().get("id")).isEqualTo(b.body().get("id"));
+            assertThat(request("GET", "/predictions/me", null).body().get("items").get(0))
+                    .isEqualTo(a.status() == 200 ? a.body() : b.body());
+        }
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM predictions WHERE match_id = ?",
+                Long.class, UUID.fromString(matchId))).isEqualTo(1L);
+        assertThatThrownBy(() -> jdbc.update("""
+                INSERT INTO predictions (id, user_id, match_id, home_score, away_score, created_at, updated_at)
+                SELECT ?, user_id, match_id, home_score, away_score, created_at, updated_at
+                FROM predictions WHERE match_id = ?
+                """, UUID.randomUUID(), UUID.fromString(matchId)))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 
     @Test

@@ -8,6 +8,7 @@ export function PredictionSummary({
   competitionName,
   seasonName,
   unsavedCount,
+  canSave,
   onSaveAll,
 }: {
   saved: Predictions;
@@ -16,6 +17,7 @@ export function PredictionSummary({
   competitionName: string;
   seasonName: string;
   unsavedCount: number;
+  canSave: boolean;
   onSaveAll: () => void;
 }) {
   const count = Object.keys(saved).length;
@@ -60,14 +62,14 @@ export function PredictionSummary({
       <button
         className="primary-button save-all"
         onClick={onSaveAll}
-        disabled={!unsavedCount}
+        disabled={!canSave}
       >
         <Save size={16} />
         Salvează toate{unsavedCount > 0 && <span>{unsavedCount}</span>}
       </button>
       <p className="device-note">
         <span className="small-dot" />
-        Salvate pe acest dispozitiv
+        Pronosticurile salvate sunt disponibile în contul tău
       </p>
       <div className="sidebar-saved">
         <div className="section-eyebrow">PRONOSTICURILE TALE</div>

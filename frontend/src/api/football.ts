@@ -1,26 +1,19 @@
 import { apiUrl } from "../config";
 import { isUuid } from "../lib/uuid";
+import { invalidResponse, isRecord, readPages } from "./page";
 import {
   matchStatuses,
   type CompetitionView,
   type MatchView,
-  type PageView,
   type PhaseView,
   type RoundView,
   type SeasonView,
   type TeamView,
 } from "./types";
 
-const invalidResponse = "Răspunsul API nu are formatul așteptat.";
-const pageSize = 100;
-
-function record(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function isCompetition(value: unknown): value is CompetitionView {
   return (
-    record(value) &&
+    isRecord(value) &&
     isUuid(value.id) &&
     isUuid(value.countryId) &&
     typeof value.name === "string" &&
@@ -29,7 +22,7 @@ function isCompetition(value: unknown): value is CompetitionView {
 }
 function isSeason(value: unknown): value is SeasonView {
   return (
-    record(value) &&
+    isRecord(value) &&
     isUuid(value.id) &&
     isUuid(value.competitionId) &&
     typeof value.name === "string" &&
@@ -39,7 +32,7 @@ function isSeason(value: unknown): value is SeasonView {
 }
 function isPhase(value: unknown): value is PhaseView {
   return (
-    record(value) &&
+    isRecord(value) &&
     isUuid(value.id) &&
     isUuid(value.seasonId) &&
     typeof value.name === "string" &&
@@ -52,7 +45,7 @@ function isPhase(value: unknown): value is PhaseView {
 }
 function isRound(value: unknown): value is RoundView {
   return (
-    record(value) &&
+    isRecord(value) &&
     isUuid(value.id) &&
     isUuid(value.seasonId) &&
     isUuid(value.phaseId) &&
@@ -62,7 +55,7 @@ function isRound(value: unknown): value is RoundView {
 }
 function isTeam(value: unknown): value is TeamView {
   return (
-    record(value) &&
+    isRecord(value) &&
     isUuid(value.id) &&
     isUuid(value.countryId) &&
     typeof value.name === "string" &&
@@ -71,7 +64,7 @@ function isTeam(value: unknown): value is TeamView {
 }
 function isMatch(value: unknown): value is MatchView {
   return (
-    record(value) &&
+    isRecord(value) &&
     isUuid(value.id) &&
     isUuid(value.seasonId) &&
     isUuid(value.roundId) &&
@@ -110,49 +103,13 @@ async function getJson(path: string, signal: AbortSignal): Promise<unknown> {
   }
 }
 
-function readPage<T>(
-  value: unknown,
-  page: number,
-  valid: (item: unknown) => item is T,
-): PageView<T> {
-  if (
-    !record(value) ||
-    !Array.isArray(value.items) ||
-    !value.items.every(valid) ||
-    value.page !== page ||
-    typeof value.totalPages !== "number" ||
-    !Number.isSafeInteger(value.totalPages) ||
-    value.totalPages < 0 ||
-    !Number.isInteger(value.size) ||
-    !Number.isInteger(value.totalElements)
-  ) {
-    throw new Error(invalidResponse);
-  }
-  return value as unknown as PageView<T>;
-}
-
-async function list<T>(
+function list<T>(
   path: string,
   filters: Record<string, string>,
   valid: (item: unknown) => item is T,
   signal: AbortSignal,
 ): Promise<T[]> {
-  const items: T[] = [];
-  for (let page = 0, totalPages = 1; page < totalPages; page++) {
-    const query = new URLSearchParams({
-      ...filters,
-      page: String(page),
-      size: String(pageSize),
-    });
-    const response = readPage(
-      await getJson(`${path}?${query}`, signal),
-      page,
-      valid,
-    );
-    totalPages = response.totalPages;
-    items.push(...response.items);
-  }
-  return items;
+  return readPages(filters, (query) => getJson(`${path}?${query}`, signal), valid);
 }
 
 export const footballApi = {

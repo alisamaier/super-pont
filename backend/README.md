@@ -106,8 +106,8 @@ proxy share its IP limit.
 
 ### Football access
 
-Football reads are public. Football writes require an `ADMIN` session and a
-valid CSRF token. To create a local admin, register a user and run this SQL
+Football schedule reads are public. Schedule and result writes require an
+`ADMIN` session and a valid CSRF token. To create a local admin, register a user and run this SQL
 against the local development database with a database operator account:
 
 ```sql
@@ -133,11 +133,31 @@ Base path: `/api`. JSON request/response bodies use camelCase. Creation returns
 | Rounds | `GET /rounds?seasonId={id}`, `GET /rounds/{id}`, `POST /rounds` |
 | Matches | `GET /matches?seasonId={id}&roundId={id}`, `GET /matches/{id}`, `POST /matches` |
 | Actual result | `PUT /matches/{id}/result` |
+| My predictions | `GET /predictions/me`, `PUT /matches/{matchId}/prediction`, `DELETE /matches/{matchId}/prediction` |
 
 Query filters are optional. Top-level lists are paginated: `page=0&size=20`, with
 page >= 0 and size between 1 and 100. Responses contain `items`, `page`, `size`,
 `totalElements`, and `totalPages`. Phase and season-participant lists are arrays.
 Country codes and competition/phase codes are normalized to uppercase.
+
+### Predictions
+
+`GET /api/predictions/me` returns a page of the signed-in account's predictions.
+Each item contains `id`, `matchId`, `homeScore`, `awayScore`, `createdAt`, and
+`updatedAt`. Reads still include predictions after kickoff.
+
+Send `{"homeScore":0,"awayScore":2}` to `PUT /api/matches/{matchId}/prediction`
+with the session's CSRF header. Both values must be JSON integers between 0 and 99.
+The first save returns `201` with a `Location` header. Updating the same match
+returns `200` and preserves the prediction ID and creation time. The server
+identifies the account from the session.
+
+`DELETE /api/matches/{matchId}/prediction` also requires the CSRF header and
+returns `204` before kickoff, including when the account has no prediction for
+the match. Both write endpoints return `409` once server time reaches kickoff
+and `404` for an unknown match. Invalid scores return `400`.
+
+### Creating football fixtures
 
 Create resources in this order, substituting the returned UUIDs:
 

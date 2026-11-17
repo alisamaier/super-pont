@@ -5,10 +5,10 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react";
 import App from "./App";
-import { STORAGE_KEY } from "./hooks/usePredictions";
 import {
   competitions,
   footballResponse,
@@ -18,20 +18,64 @@ import {
   seasons,
 } from "./api/football.test-data";
 import { toFixture } from "./lib/fixtures";
+import type { Predictions } from "./types";
 
 const fixtures = matches.slice(0, 3).map(toFixture);
 const fetcher = vi.fn<typeof fetch>();
+const storageKey = "super-pont:predictions:api-v1";
+const account = { id: "fan-id", username: "fan", email: "fan@example.test", role: "USER" };
+let serverPredictions: Predictions;
+let signedIn: boolean;
+let loadStatus: number;
+let writeStatus: number;
+const predictionCalls = vi.fn<typeof fetch>();
 
 beforeEach(() => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-01T18:00:00Z"));
+  window.history.replaceState(null, "", "/");
   localStorage.clear();
+  serverPredictions = {};
+  signedIn = true;
+  loadStatus = 200;
+  writeStatus = 200;
   fetcher
     .mockReset()
     .mockImplementation(async (input) => footballResponse(input));
-  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
-    new URL(String(input)).pathname === "/api/users/me"
-      ? Promise.resolve(new Response(null, { status: 401 }))
-      : fetcher(input, init),
-  );
+  predictionCalls.mockReset().mockImplementation(async (input, init) => {
+    const url = new URL(String(input));
+    expect(init?.credentials).toBe("include");
+    if (url.pathname === "/api/predictions/me") {
+      if (loadStatus !== 200) return new Response(null, { status: loadStatus });
+      return Response.json(page(Object.entries(serverPredictions).map(([matchId, score]) => ({
+        matchId, homeScore: score.home, awayScore: score.away,
+      }))));
+    }
+    expect(new Headers(init?.headers).get("X-CSRF-TOKEN")).toBe("test-csrf");
+    if (writeStatus !== 200) return new Response(null, { status: writeStatus });
+    const matchId = url.pathname.split("/")[3];
+    if (init?.method === "DELETE") {
+      delete serverPredictions[matchId];
+      return new Response(null, { status: 204 });
+    }
+    const { homeScore, awayScore, ...rest } = JSON.parse(String(init?.body));
+    expect(rest).toEqual({});
+    serverPredictions[matchId] = { home: homeScore, away: awayScore };
+    return Response.json({ matchId, homeScore, awayScore });
+  });
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const { pathname } = new URL(String(input));
+    if (pathname === "/api/users/me")
+      return signedIn ? Response.json(account) : new Response(null, { status: 401 });
+    if (pathname === "/api/auth/csrf")
+      return Response.json({ headerName: "X-CSRF-TOKEN", token: "test-csrf" });
+    if (pathname === "/api/auth/logout") {
+      signedIn = false;
+      return new Response(null, { status: 204 });
+    }
+    if (pathname === "/api/predictions/me" || pathname.endsWith("/prediction"))
+      return predictionCalls(input, init);
+    return fetcher(input, init);
+  });
 });
 afterEach(() => {
   cleanup();
@@ -58,10 +102,10 @@ function fill(index: number, home: string, away: string) {
   );
 }
 function saved() {
-  return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+  return serverPredictions;
 }
-function report() {
-  return within(screen.getByRole("region", { name: "Ultima salvare" }));
+async function report() {
+  return within(await screen.findByRole("region", { name: "Ultima salvare" }));
 }
 
 describe("prediction validation in the application", () => {
@@ -71,6 +115,7 @@ describe("prediction validation in the application", () => {
     fireEvent.click(
       card(0).getByRole("button", { name: "Salvează pronosticul" }),
     );
+    expect((await report()).getByText("Salvate (1)")).toBeTruthy();
     expect(saved()).toEqual({ [fixtures[0].id]: { home: 0, away: 99 } });
     expect(
       (
@@ -79,7 +124,6 @@ describe("prediction validation in the application", () => {
         ) as HTMLInputElement
       ).value,
     ).toBe("99");
-    expect(report().getByText("Salvate (1)")).toBeTruthy();
     view.unmount();
     await renderRound();
     expect(
@@ -111,11 +155,12 @@ describe("prediction validation in the application", () => {
       fireEvent.click(
         card(0).getByRole("button", { name: "Salvează pronosticul" }),
       );
+      const result = await report();
       expect(saved()).toEqual({});
-      expect(report().getByText("Salvate (0)")).toBeTruthy();
-      expect(report().getByText("Respinse (1)")).toBeTruthy();
+      expect(result.getByText("Salvate (0)")).toBeTruthy();
+      expect(result.getByText("Respinse (1)")).toBeTruthy();
       expect(
-        report().getByText(
+        result.getByText(
           `${fixtures[0].home.name} – ${fixtures[0].away.name}`,
         ),
       ).toBeTruthy();
@@ -127,6 +172,7 @@ describe("prediction validation in the application", () => {
     fireEvent.click(
       card(0).getByRole("button", { name: "Salvează pronosticul" }),
     );
+    await report();
     expect(card(0).getByText("Gazde: Introdu un scor.")).toBeTruthy();
     expect(card(0).getByText("Oaspeți: Introdu un scor.")).toBeTruthy();
     expect(saved()).toEqual({});
@@ -138,12 +184,13 @@ describe("prediction validation in the application", () => {
     fill(1, "100", "1");
     fill(2, "01", "");
     fireEvent.click(screen.getByRole("button", { name: /Salvează toate/ }));
+    const result = await report();
     expect(saved()).toEqual({ [fixtures[0].id]: { home: 0, away: 99 } });
-    expect(report().getByText("Salvate (1)")).toBeTruthy();
-    expect(report().getByText("Respinse (2)")).toBeTruthy();
+    expect(result.getByText("Salvate (1)")).toBeTruthy();
+    expect(result.getByText("Respinse (2)")).toBeTruthy();
     for (const index of [0, 1, 2])
       expect(
-        report().getByText(
+        result.getByText(
           `${fixtures[index].home.name} – ${fixtures[index].away.name}`,
         ),
       ).toBeTruthy();
@@ -158,13 +205,13 @@ describe("prediction validation in the application", () => {
     fill(1, "99", "01");
     fill(2, "01", "0");
     fireEvent.click(screen.getByRole("button", { name: /Salvează toate/ }));
+    await result.findByText("Salvate (2)");
     expect(saved()).toEqual({
       [fixtures[0].id]: { home: 0, away: 99 },
       [fixtures[1].id]: { home: 99, away: 1 },
       [fixtures[2].id]: { home: 1, away: 0 },
     });
-    expect(report().getByText("Salvate (2)")).toBeTruthy();
-    expect(report().queryByText(/Respinse/)).toBeNull();
+    expect(result.queryByText(/Respinse/)).toBeNull();
   });
 
   it("keeps bulk save available when every attempted draft is invalid", async () => {
@@ -178,83 +225,108 @@ describe("prediction validation in the application", () => {
       ).disabled,
     ).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: /Salvează toate/ }));
-    expect(report().getByText("Salvate (0)")).toBeTruthy();
-    expect(report().getByText("Respinse (1)")).toBeTruthy();
+    const result = await report();
+    expect(result.getByText("Salvate (0)")).toBeTruthy();
+    expect(result.getByText("Respinse (1)")).toBeTruthy();
     expect(saved()).toEqual({});
   });
 
   it("preserves an existing saved score when its edited draft is rejected", async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ [fixtures[0].id]: { home: 2, away: 1 } }),
-    );
+    serverPredictions[fixtures[0].id] = { home: 2, away: 1 };
     await renderRound();
     fill(0, "100", "1");
     fill(1, "0", "99");
     fireEvent.click(screen.getByRole("button", { name: /Salvează toate/ }));
+    expect((await report()).getByText("Respinse (1)")).toBeTruthy();
     expect(saved()).toEqual({
       [fixtures[0].id]: { home: 2, away: 1 },
       [fixtures[1].id]: { home: 0, away: 99 },
     });
-    expect(report().getByText("Respinse (1)")).toBeTruthy();
   });
 
-  it("validates and normalizes stored scores, reporting invalid matches on load", async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        [fixtures[0].id]: { home: "00", away: "099" },
-        [fixtures[1].id]: { home: 100, away: 1 },
-        [fixtures[2].id]: { home: "1e1", away: 0 },
-      }),
-    );
+  it("reports prediction load errors and lets the user retry", async () => {
+    loadStatus = 503;
+    serverPredictions[fixtures[0].id] = { home: 0, away: 99 };
     await renderRound();
-    expect(
-      (
-        card(0).getByLabelText(
-          `Scor ${fixtures[0].away.name}`,
-        ) as HTMLInputElement
-      ).value,
-    ).toBe("99");
-    expect(
-      (
-        card(1).getByLabelText(
-          `Scor ${fixtures[1].home.name}`,
-        ) as HTMLInputElement
-      ).value,
-    ).toBe("");
-    const alert = screen.getByRole("alert");
-    expect(alert.textContent).toContain("Pronosticuri respinse la încărcare");
-    expect(alert.textContent).toContain(fixtures[1].home.shortName);
-    expect(alert.textContent).toContain(fixtures[2].home.shortName);
+    expect((await screen.findByRole("alert")).textContent).toContain("HTTP 503");
+    expect((card(0).getByLabelText("Scor Nord") as HTMLInputElement).disabled).toBe(true);
+    loadStatus = 200;
+    fireEvent.click(screen.getByRole("button", { name: "Reîncarcă pronosticurile" }));
+    await card(0).findByRole("button", { name: "Pronostic salvat" });
+    expect((card(0).getByLabelText("Scor Sud") as HTMLInputElement).value).toBe("99");
   });
 
-  it("does not report successful saves when localStorage fails", async () => {
+  it("reports failed writes alongside invalid drafts and keeps both available to retry", async () => {
     await renderRound();
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("Storage full");
-    });
+    writeStatus = 503;
     fill(0, "99", "0");
     fill(1, "100", "1");
     fireEvent.click(screen.getByRole("button", { name: /Salvează toate/ }));
-    expect(report().getByText("Salvate (0)")).toBeTruthy();
-    expect(report().getByText("Respinse (2)")).toBeTruthy();
+    const result = await report();
+    expect(result.getByText("Salvate (0)")).toBeTruthy();
+    expect(result.getByText("Respinse (2)")).toBeTruthy();
+    expect(result.getByText(/HTTP 503/)).toBeTruthy();
     expect(saved()).toEqual({});
+    expect((card(0).getByLabelText("Scor Nord") as HTMLInputElement).value).toBe("99");
+  });
+
+  it("updates and deletes a saved prediction only after API confirmation", async () => {
+    serverPredictions[fixtures[0].id] = { home: 2, away: 1 };
+    await renderRound();
+    fill(0, "4", "3");
+    fireEvent.click(card(0).getByRole("button", { name: "Actualizează pronosticul" }));
+    await card(0).findByRole("button", { name: "Pronostic salvat" });
+    expect(saved()[fixtures[0].id]).toEqual({ home: 4, away: 3 });
+    const remove = card(0).getByRole("button", { name: "Șterge pronosticul Nord – Sud" });
+    writeStatus = 503;
+    fireEvent.click(remove);
+    expect((await card(0).findByRole("alert")).textContent).toContain("HTTP 503");
+    expect(saved()[fixtures[0].id]).toEqual({ home: 4, away: 3 });
+    writeStatus = 200;
+    fireEvent.click(remove);
+    await screen.findByText("Pronosticul a fost șters.");
+    expect(saved()).toEqual({});
+    expect((card(0).getByLabelText("Scor Nord") as HTMLInputElement).value).toBe("");
+  });
+
+  it("keeps saved scores visible and disables editing and deletion at kickoff", async () => {
+    vi.mocked(Date.now).mockReturnValue(Date.parse(fixtures[0].kickoff));
+    serverPredictions[fixtures[0].id] = { home: 2, away: 1 };
+    await renderRound();
+    await card(0).findByRole("button", { name: "Pronostic salvat" });
+    expect((card(0).getByLabelText("Scor Nord") as HTMLInputElement).disabled).toBe(true);
+    expect((card(0).getByRole("button", { name: "Șterge pronosticul Nord – Sud" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((card(1).getByRole("button", { name: "Pronosticuri închise" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((card(2).getByLabelText("Scor Atlas") as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it("clears account scores and drafts on sign-out and disables guest editing", async () => {
+    serverPredictions[fixtures[0].id] = { home: 2, away: 1 };
+    await renderRound();
+    fill(1, "6", "");
+    fireEvent.click(screen.getByRole("button", { name: "Deconectare" }));
+    await screen.findByText(/pentru a completa și salva pronosticuri/);
+    for (const [index, name] of [[0, "Nord"], [1, "Est"]] as const) {
+      const input = card(index).getByLabelText(`Scor ${name}`) as HTMLInputElement;
+      expect(input.value).toBe("");
+      expect(input.disabled).toBe(true);
+    }
   });
 });
 
 async function renderRound() {
   const view = render(<App />);
   await screen.findByRole("article", { name: "Nord – Sud" });
+  await waitFor(() => {
+    expect(screen.queryByText("Se încarcă pronosticurile…")).toBeNull();
+  });
   return view;
 }
 
 describe("backend schedule integration", () => {
   it("shows loading while fetching the catalogue and renders API fixtures", async () => {
     render(<App />);
-    expect(screen.getByRole("status").textContent).toContain(
-      "Se încarcă competițiile",
-    );
+    expect(screen.getByText("Se încarcă competițiile…")).toBeTruthy();
     await screen.findByRole("article", { name: "Nord – Sud" });
     expect(screen.getAllByRole("article")).toHaveLength(3);
     expect((screen.getByLabelText("Sezon") as HTMLSelectElement).value).toBe(
@@ -271,6 +343,8 @@ describe("backend schedule integration", () => {
     fireEvent.click(
       card(0).getByRole("button", { name: "Salvează pronosticul" }),
     );
+    await report();
+    fill(1, "09", "");
     fireEvent.change(screen.getByLabelText("Etapă"), {
       target: { value: rounds[1].id },
     });
@@ -289,6 +363,7 @@ describe("backend schedule integration", () => {
     fireEvent.click(
       final.getByRole("button", { name: "Salvează pronosticul" }),
     );
+    await final.findByRole("button", { name: "Pronostic salvat" });
     fireEvent.change(screen.getByLabelText("Sezon"), {
       target: { value: seasons[1].id },
     });
@@ -308,6 +383,7 @@ describe("backend schedule integration", () => {
     expect(
       (card(0).getByLabelText("Scor Nord") as HTMLInputElement).value,
     ).toBe("1");
+    expect((card(1).getByLabelText("Scor Est") as HTMLInputElement).value).toBe("09");
     expect(saved()).toEqual({
       [matches[0].id]: { home: 1, away: 0 },
       [matches[3].id]: { home: 3, away: 2 },
@@ -370,10 +446,12 @@ describe("backend schedule integration", () => {
     ).toBeNull();
   });
 
-  it("leaves old demo predictions untouched and never associates them with UUID fixtures", async () => {
+  it("ignores and preserves legacy predictions, including UUID-keyed browser saves", async () => {
     const legacyKey = "super-pont:predictions:demo-2026-round-16";
     const legacy = JSON.stringify({ m1: { home: 8, away: 7 } });
     localStorage.setItem(legacyKey, legacy);
+    const oldScores = JSON.stringify({ [fixtures[0].id]: { home: 8, away: 7 } });
+    localStorage.setItem(storageKey, oldScores);
     await renderRound();
     expect(
       (card(0).getByLabelText("Scor Nord") as HTMLInputElement).value,
@@ -382,7 +460,9 @@ describe("backend schedule integration", () => {
     fireEvent.click(
       card(0).getByRole("button", { name: "Salvează pronosticul" }),
     );
+    await report();
     expect(localStorage.getItem(legacyKey)).toBe(legacy);
+    expect(localStorage.getItem(storageKey)).toBe(oldScores);
     expect(saved()).toEqual({ [matches[0].id]: { home: 1, away: 0 } });
   });
 });

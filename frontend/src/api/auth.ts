@@ -34,11 +34,15 @@ class AuthError extends Error {
   }
 }
 
-async function request(path: string, init: RequestInit = {}) {
-  const response = await fetch(`${apiUrl}/api${path}`, {
+export function sessionFetch(path: string, init: RequestInit = {}) {
+  return fetch(`${apiUrl}/api${path}`, {
     ...init,
     credentials: "include",
   });
+}
+
+async function request(path: string, init: RequestInit = {}) {
+  const response = await sessionFetch(path, init);
   if (!response.ok) {
     const problem = path === "/auth/register" && response.status === 409
       ? await response.json().catch(() => null)
@@ -55,10 +59,14 @@ async function request(path: string, init: RequestInit = {}) {
   return response;
 }
 
-async function submit(path: string, body?: LoginInput | RegistrationInput) {
-  const csrf = await request("/auth/csrf");
+export async function csrfHeaders(signal?: AbortSignal) {
+  const csrf = await request("/auth/csrf", { signal });
   const { headerName, token }: CsrfToken = await csrf.json();
-  const headers = new Headers({ [headerName]: token });
+  return new Headers({ [headerName]: token });
+}
+
+async function submit(path: string, body?: LoginInput | RegistrationInput) {
+  const headers = await csrfHeaders();
   if (body) headers.set("Content-Type", "application/json");
   return request(path, {
     method: "POST",

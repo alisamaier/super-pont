@@ -15,6 +15,9 @@ interface Props {
   fixture: Fixture;
   draft: ScoreDraft;
   saved?: Prediction;
+  disabled: boolean;
+  locked: boolean;
+  actionError?: string;
   showErrors: boolean;
   onChange: (draft: ScoreDraft) => void;
   onSave: () => void;
@@ -25,6 +28,9 @@ export function MatchCard({
   fixture,
   draft,
   saved,
+  disabled,
+  locked,
+  actionError,
   showErrors,
   onChange,
   onSave,
@@ -35,6 +41,11 @@ export function MatchCard({
   const awayError = showErrors || draft.away !== "" ? errors.away : null;
   const unchanged =
     !!saved && saved.home === parsed?.home && saved.away === parsed?.away;
+  const saveLabel = locked
+    ? "Pronosticuri închise"
+    : saved
+      ? "Actualizează pronosticul"
+      : "Salvează pronosticul";
   return (
     <article
       className={`match-card${unchanged ? " is-saved" : ""}`}
@@ -67,7 +78,7 @@ export function MatchCard({
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          onSave();
+          if (!disabled && !locked && !unchanged) onSave();
         }}
       >
         <div className="match-teams">
@@ -81,6 +92,7 @@ export function MatchCard({
             <div className="score-inputs">
               <input
                 type="text"
+                disabled={disabled || locked}
                 inputMode="numeric"
                 required
                 placeholder="–"
@@ -97,6 +109,7 @@ export function MatchCard({
               <span className="score-separator">:</span>
               <input
                 type="text"
+                disabled={disabled || locked}
                 inputMode="numeric"
                 required
                 placeholder="–"
@@ -128,6 +141,7 @@ export function MatchCard({
             )}
           </div>
         )}
+        {actionError && <p className="score-errors" role="alert">{actionError}</p>}
         <div className="match-location">
           <MapPin size={12} />
           <span>{fixture.venue}</span>
@@ -136,21 +150,18 @@ export function MatchCard({
           <button
             type="submit"
             className={`save-match${unchanged ? " saved-button" : ""}`}
-            disabled={unchanged}
+            disabled={disabled || locked || unchanged}
           >
             {unchanged ? <Check size={15} /> : <Save size={15} />}
-            {unchanged
-              ? "Pronostic salvat"
-              : saved
-                ? "Actualizează pronosticul"
-                : "Salvează pronosticul"}
+            {unchanged ? "Pronostic salvat" : saveLabel}
           </button>
           {saved && (
             <button
               className="icon-button remove-prediction"
               type="button"
-              title="Șterge pronosticul"
+              title={locked ? "Pronosticul este blocat după start." : "Șterge pronosticul"}
               aria-label={`Șterge pronosticul ${fixture.home.name} – ${fixture.away.name}`}
+              disabled={disabled || locked}
               onClick={onRemove}
             >
               <Trash2 size={15} />

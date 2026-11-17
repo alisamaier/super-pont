@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useFootballSchedule } from "./hooks/useFootballSchedule";
-import { usePredictions } from "./hooks/usePredictions";
+import { predictionError, usePredictions } from "./hooks/usePredictions";
 import { fixtureDays } from "./lib/fixtures";
 import { pendingDrafts, type SaveResult } from "./lib/predictions";
 import { MatchCard } from "./components/MatchCard";
@@ -47,7 +47,7 @@ function App() {
     getCurrentUser(controller.signal)
       .catch(() => null)
       .then((account) => {
-        if (!controller.signal.aborted) setUser(account);
+        if (!controller.signal.aborted) setUser((current) => current === undefined ? account : current);
       });
     return () => controller.abort();
   }, []);
@@ -69,6 +69,7 @@ function App() {
     setSigningOut(true);
     try {
       await logout();
+      resetPredictionEdits();
       setUser(null);
       navigate("/");
     } catch (cause) {
@@ -82,7 +83,9 @@ function App() {
   const { competition, season, round, phase } = catalog;
   const fixtures = catalog.matches.data ?? [];
   const days = fixtureDays(fixtures);
-  const { saved, save, remove, error } = usePredictions(fixtures);
+  const predictions = usePredictions(user?.id, fixtures);
+  const { saved, closed } = predictions;
+  const canEdit = predictions.ready && !predictions.busy && !signingOut;
   const [draftEdits, setDraftEdits] = useState<Record<string, ScoreDraft>>({});
   const drafts = Object.fromEntries(
     fixtures.map((fixture) => [
@@ -102,6 +105,7 @@ function App() {
     roundId: string;
     result: SaveResult;
   } | null>(null);
+  const [removeError, setRemoveError] = useState<{ matchId: string; message: string } | null>(null);
   const [notification, setNotification] = useState<{
     text: string;
     id: number;
@@ -114,6 +118,7 @@ function App() {
       (view === "all" || saved[fixture.id]),
   );
   const unsaved = pendingDrafts(drafts, saved);
+  const unsavedIds = Object.keys(unsaved);
   const request = [
     { resource: catalog.competitions, label: "competițiile" },
     { resource: catalog.seasons, label: "sezoanele" },
@@ -139,50 +144,59 @@ function App() {
   function notify(text: string) {
     setNotification({ text, id: Date.now() });
   }
-  function saveEntries(entries: Record<string, ScoreDraft>) {
+
+  function resetPredictionEdits() {
+    setDraftEdits({});
+    setValidatedIds(new Set());
+    setSaveResult(null);
+    setRemoveError(null);
+    setNotification(null);
+  }
+
+  async function saveEntries(entries: Record<string, ScoreDraft>) {
+    if (!canEdit) return;
+    setNotification(null);
     setValidatedIds(
       (current) => new Set([...current, ...Object.keys(entries)]),
     );
-    const result = save(entries);
+    const result = await predictions.save(entries);
+    if (!result) return;
     if (round) setSaveResult({ roundId: round.id, result });
-    setDraftEdits((current) => ({
-      ...current,
-      ...Object.fromEntries(
-        Object.entries(result.saved).map(([id, prediction]) => [
-          id,
-          { home: String(prediction.home), away: String(prediction.away) },
-        ]),
-      ),
-    }));
-    const accepted = Object.keys(result.saved).length;
+    const acceptedIds = Object.keys(result.saved);
+    const accepted = acceptedIds.length;
     const rejected = Object.keys(result.rejected).length;
-    if (rejected)
+    if (accepted) {
+      setDraftEdits((current) => {
+        const next = { ...current };
+        for (const id of acceptedIds) delete next[id];
+        return next;
+      });
       notify(
-        `${accepted} salvate · ${rejected} respinse. Vezi rezultatul salvării.`,
+        rejected
+          ? `${accepted} salvate · ${rejected} respinse. Vezi rezultatul salvării.`
+          : accepted === 1
+            ? "Pronosticul tău a fost salvat."
+            : `${accepted} pronosticuri au fost salvate.`,
       );
-    else if (accepted)
-      notify(
-        accepted === 1
-          ? "Pronosticul tău a fost salvat."
-          : `${accepted} pronosticuri au fost salvate.`,
-      );
+    }
   }
-  function saveOne(id: string) {
-    saveEntries({ [id]: drafts[id] });
-  }
-  function saveAll() {
-    if (Object.keys(unsaved).length) saveEntries(unsaved);
-  }
-  function removeOne(id: string) {
-    if (remove(id)) {
-      setDraftEdits((current) => ({
-        ...current,
-        [id]: { home: "", away: "" },
-      }));
+  async function removeOne(id: string) {
+    if (!canEdit) return;
+    setNotification(null);
+    setRemoveError(null);
+    try {
+      if (!(await predictions.remove(id))) return;
+      setDraftEdits((current) => {
+        const next = { ...current };
+        delete next[id];
+        return next;
+      });
       setValidatedIds(
         (current) => new Set([...current].filter((item) => item !== id)),
       );
       notify("Pronosticul a fost șters.");
+    } catch (error) {
+      setRemoveError({ matchId: id, message: predictionError(error) });
     }
   }
 
@@ -241,7 +255,7 @@ function App() {
             {user ? (
               <>
                 <span className="account-name" title={user.username}>{user.username}</span>
-                <button type="button" disabled={signingOut} onClick={signOut}>
+                <button type="button" disabled={signingOut || predictions.busy} onClick={signOut}>
                   Deconectare
                 </button>
               </>
@@ -267,6 +281,7 @@ function App() {
             navigate("/login");
           }}
           onLogin={(account) => {
+            resetPredictionEdits();
             setUser(account);
             setRegisteredUsername("");
             navigate("/");
@@ -409,9 +424,21 @@ function App() {
                 ))}
               </div>
             )}
-            {error && (
-              <div className="storage-error" role="alert">
-                {error}
+            {user === null && (
+              <p className="prediction-notice">
+                <a href="/login" onClick={(event) => followLink(event, "/login")}>Intră în cont</a>
+                {" pentru a completa și salva pronosticuri."}
+              </p>
+            )}
+            {(predictions.loading || predictions.busy) && (
+              <p className="prediction-notice" role="status">
+                {predictions.loading ? "Se încarcă pronosticurile…" : "Se sincronizează pronosticurile…"}
+              </p>
+            )}
+            {predictions.loadError && (
+              <div className="prediction-notice" role="alert">
+                {predictions.loadError}{" "}
+                <button className="text-button" onClick={predictions.retry}>Reîncarcă pronosticurile</button>
               </div>
             )}
             {saveResult &&
@@ -430,6 +457,9 @@ function App() {
                   fixture={fixture}
                   draft={drafts[fixture.id]}
                   saved={saved[fixture.id]}
+                  disabled={!canEdit}
+                  locked={closed.has(fixture.id)}
+                  actionError={removeError?.matchId === fixture.id ? removeError.message : undefined}
                   showErrors={validatedIds.has(fixture.id)}
                   onChange={(draft) =>
                     setDraftEdits((current) => ({
@@ -437,7 +467,7 @@ function App() {
                       [fixture.id]: draft,
                     }))
                   }
-                  onSave={() => saveOne(fixture.id)}
+                  onSave={() => saveEntries({ [fixture.id]: drafts[fixture.id] })}
                   onRemove={() => removeOne(fixture.id)}
                 />
               ))}
@@ -510,8 +540,9 @@ function App() {
               roundNumber={round.number}
               competitionName={competition.name}
               seasonName={season.name}
-              unsavedCount={Object.keys(unsaved).length}
-              onSaveAll={saveAll}
+              unsavedCount={unsavedIds.length}
+              canSave={canEdit && unsavedIds.some((id) => !closed.has(id))}
+              onSaveAll={() => saveEntries(unsaved)}
             />
           )}
         </div>

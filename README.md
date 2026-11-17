@@ -72,9 +72,9 @@ Localhost database and CORS defaults exist only in the `dev` profile.
 3. Open [Super Pont](http://localhost:5173). Choose a competition, season, and
    round. The schedule comes from the backend's read endpoints, including its
    configured phases; an unseeded database shows an empty state.
-4. Save a score, change rounds, and return or reload. Predictions are stored
-   locally by backend match UUID under `super-pont:predictions:api-v1`. Old mock
-   predictions remain in their original storage key and are not mapped to API matches.
+4. Sign in and save a prediction for a future match. Change rounds and return, reload,
+   or sign into the same account in another browser. The saved score appears in each
+   session. Legacy browser-local scores stay in browser storage.
 5. To check recovery, stop the backend, reload the frontend, and confirm it shows
    an error. Start the backend again and click **Reîncearcă**.
 
@@ -101,6 +101,28 @@ update `FRONTEND_URL` and restart the backend. No Vite proxy is needed.
 
 See the [authentication API](backend/README.md#authentication) for CSRF headers,
 status codes, and local admin setup.
+
+## Verify predictions in PostgreSQL
+
+1. In the local Compose stack, sign in and save a score for a match whose kickoff
+   is in the future. If the sample fixtures have already started, use a local admin
+   to [create a future match](backend/README.md#endpoints) within its season dates.
+2. Run `podman compose exec db psql -U superpont -d superpont` from the repository
+   root. Use `docker compose` if applicable and substitute the local database user
+   and name if you changed them.
+3. Run the query below with your username. Update the score and rerun the query to
+   check that the same row has the new scores and a later `updated_at`. Delete
+   the prediction before kickoff and rerun the query to confirm the row is gone.
+
+```sql
+SELECT p.id, p.match_id, p.home_score, p.away_score, m.kickoff,
+       p.created_at, p.updated_at
+FROM predictions AS p
+JOIN users AS u ON u.id = p.user_id
+JOIN football_matches AS m ON m.id = p.match_id
+WHERE u.username = 'your_username'
+ORDER BY p.updated_at DESC;
+```
 
 ## Build and verification
 

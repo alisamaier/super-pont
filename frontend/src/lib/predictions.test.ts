@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   pendingDrafts,
-  readStoredPredictions,
   validateEntries,
   validatePrediction,
   validateScore,
@@ -70,7 +69,7 @@ describe("score validation", () => {
 });
 
 const ids = new Set(["m1", "m2", "m3"]);
-describe("bulk and localStorage consistency", () => {
+describe("bulk validation", () => {
   it("returns normalized valid predictions and explicit per-match rejections", () => {
     expect(
       validateEntries(
@@ -90,36 +89,19 @@ describe("bulk and localStorage consistency", () => {
     });
   });
 
-  it.each(["0", "99", "100", "01", "001", "1e1", "-1", "1.0", "text", ""])(
-    "uses the same rules for drafts and stored score %j",
-    (home) => {
-      const entries = { m1: { home, away: "0" } };
-      expect(readStoredPredictions(JSON.stringify(entries), ids)).toEqual(
-        validateEntries(entries, ids),
-      );
-    },
-  );
-
-  it("accepts normalized numeric storage values and rejects invalid or unknown records", () => {
-    const result = readStoredPredictions(
-      JSON.stringify({
+  it("accepts normalized scores and rejects invalid or unknown records", () => {
+    const result = validateEntries(
+      {
         m1: { home: 0, away: 99 },
         m2: { home: 100, away: 1 },
         m3: { home: 1.5, away: 0 },
         unknown: { home: 1, away: 0 },
-      }),
+      },
       ids,
     );
     expect(result.saved).toEqual({ m1: { home: 0, away: 99 } });
     expect(Object.keys(result.rejected)).toEqual(["m2", "m3", "unknown"]);
   });
-
-  it.each(["{bad", "null", "[]", '"invalid"'])(
-    "reports invalid storage envelope %j",
-    (raw) => {
-      expect(() => readStoredPredictions(raw, ids)).toThrow();
-    },
-  );
 
   it("keeps invalid and partially entered drafts pending, excluding untouched and unchanged matches", () => {
     expect(

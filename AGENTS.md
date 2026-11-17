@@ -8,7 +8,7 @@
 
 ## Backend conventions
 
-- Organize `ro.superpont.football` by feature: `country`, `competition`, `team`, `season`, `phase`, `round`, `match`. Within each feature use `controller`, `service`, `repository`, `model` (entities/enums), and `dto` (request/view records).
+- Organize `ro.superpont.football` by feature: `country`, `competition`, `team`, `season`, `phase`, `round`, `match`, `prediction`. Within each feature use `controller`, `service`, `repository`, `model` (entities/enums), and `dto` (request/view records).
 - `ro.superpont.common` owns shared UUID identity, paging, repository helpers and Problem Detail exception handling. Keep business rules in transactional services, using repositories for related resources instead of service-to-service dependencies. Reads are read-only transactions; writes use `@Transactional`.
 - Controllers validate request DTOs and return view DTOs, not JPA entities. Preserve `/api` paths, camelCase JSON, and status codes: `201` with `Location` for creation, `200` for registration/result updates, `400` invalid input, `404` missing references, `409` constraint conflicts.
 - Top-level lists use `PageView` (`items`, `page`, `size`, `totalElements`, `totalPages`), zero-based pages and sizes 1–100. Phase and season-participant lists are arrays.
@@ -26,9 +26,9 @@
 
 - Use the typed, paginated read client in `frontend/src/api/` and the selection flow in `hooks/useFootballSchedule.ts`. Reuse API DTOs and map them to display fixtures in `lib/fixtures.ts`. Keep loading, empty, retry and stale-request handling; do not fall back to hardcoded matches.
 - Preserve the responsive match cards and sticky ticket sidebar. Competition, season, phase and round labels come from API data; kickoff is displayed in the browser's local time.
-- `lib/predictions.ts` is the shared validator for individual saves, bulk saves and storage loading. Both prediction scores are required, each an integer **0–99** inclusive. Text input accepts ASCII digits only: no signs, whitespace, letters, decimals or scientific notation. Leading zeros are allowed and normalize to integers.
-- Predictions are browser-local under `super-pont:predictions:api-v1`, keyed by backend match UUID. Show only the selected round's entries while preserving other rounds in storage. Do not remap legacy mock IDs. Keep inline errors and explicit bulk-save results; valid drafts save while invalid or partial drafts are reported, and untouched empty matches are excluded.
-- Account authentication uses an HttpOnly session cookie and session-backed CSRF tokens. Predictions remain browser-local.
+- `lib/predictions.ts` is the shared validator for individual and bulk saves. Both prediction scores are required, each an integer **0–99** inclusive. Text input accepts ASCII digits only: no signs, whitespace, letters, decimals or scientific notation. Leading zeros are allowed and normalize to integers.
+- Saved predictions belong to a signed-in account and are unique per user and match. Show only the selected round's entries and keep unsaved drafts in memory when switching selections. Leave legacy browser storage untouched. Keep inline errors and explicit bulk-save results; valid drafts save while invalid or partial drafts are reported, and untouched empty matches are excluded.
+- Account authentication uses an HttpOnly session cookie and session-backed CSRF tokens. The server checks kickoff against its own clock for every prediction write.
 
 ## Build and test
 
@@ -40,5 +40,5 @@
 
 - Keep credentials in ignored `.env` files or provider environment settings; examples contain no secrets. Spring reads environment variables, not `.env` files directly. Use a JDBC `DATABASE_URL` with separate `DATABASE_USERNAME` and `DATABASE_PASSWORD`; retain documented TLS certificate and hostname verification for Neon.
 - `VITE_API_URL` is a public HTTP(S) backend origin without `/api`, embedded at build time. Never put secrets in `VITE_*` variables. Use HTTPS in production.
-- `FRONTEND_URL` is one exact frontend origin with no path or trailing slash. Preserve exact-origin CORS, not wildcard previews. Football reads are public. Football writes require an ADMIN session and a valid CSRF token.
+- `FRONTEND_URL` is one exact frontend origin with no path or trailing slash. Preserve exact-origin CORS, not wildcard previews. Football schedule reads are public, and schedule and result writes require an ADMIN session and a valid CSRF token. Prediction reads require a signed-in session, and prediction writes also require a valid CSRF token.
 - Keep production off the `dev` profile. Preserve the non-root runtime and health-only Actuator exposure with health details hidden. Never run tests against a production database.

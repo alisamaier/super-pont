@@ -1,84 +1,143 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { csrfHeaders } from "../api/auth";
+import { predictionApi } from "../api/predictions";
+import { validateEntries } from "../lib/predictions";
 import type { Fixture, Predictions, ScoreDraft } from "../types";
-import {
-  readStoredPredictions,
-  validateEntries,
-  type SaveResult,
-} from "../lib/predictions";
 
-export const STORAGE_KEY = "super-pont:predictions:api-v1";
+const lockedMessage = "Meciul a început. Pronosticul este blocat.";
 
-export function usePredictions(fixtures: readonly Fixture[]) {
-  const fixtureIds = new Set(fixtures.map((fixture) => fixture.id));
-  const [initial] = useState(() => {
-    try {
-      return {
-        ...readStoredPredictions(localStorage.getItem(STORAGE_KEY)),
-        error: "",
-      };
-    } catch {
-      return {
-        saved: {} as Predictions,
-        rejected: {} as Record<string, string>,
-        error:
-          "Pronosticurile salvate nu au putut fi citite pe acest dispozitiv.",
-      };
-    }
-  });
-  const [allSaved, setAllSaved] = useState(initial.saved);
-  const [rejected, setRejected] = useState(initial.rejected);
-  const [storageError, setStorageError] = useState(initial.error);
+export function predictionError(error: unknown) {
+  if (error instanceof Error && !["AbortError", "TimeoutError", "TypeError"].includes(error.name)) {
+    return error.message;
+  }
+  return "Sincronizarea pronosticurilor a eșuat. Încearcă din nou.";
+}
+
+export function usePredictions(userId: string | undefined, fixtures: readonly Fixture[]) {
+  const [attempt, setAttempt] = useState(0);
+  const [loaded, setLoaded] = useState<{
+    userId: string;
+    attempt: number;
+    signal: AbortSignal;
+    data?: Predictions;
+    error?: string;
+  }>();
+  const inFlight = useRef<AbortSignal | null>(null);
+  const [pending, setPending] = useState<AbortSignal | null>(null);
+  const [clock, setClock] = useState(Date.now);
+  const now = Date.now();
+  const kickoffs = new Map(fixtures.map((fixture) => [fixture.id, Date.parse(fixture.kickoff)]));
+  const closed = new Set<string>();
+  let nextKickoff = Infinity;
+  for (const [id, kickoff] of kickoffs) {
+    if (kickoff <= now) closed.add(id);
+    else nextKickoff = Math.min(nextKickoff, kickoff);
+  }
+
+  useEffect(() => {
+    if (!Number.isFinite(nextKickoff)) return;
+    const timer = window.setTimeout(
+      () => setClock(Date.now()),
+      Math.min(2_147_483_647, Math.max(0, nextKickoff - Math.max(clock, Date.now()))),
+    );
+    return () => window.clearTimeout(timer);
+  }, [clock, nextKickoff]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    const scope = { userId, attempt, signal };
+    void predictionApi.list(AbortSignal.any([signal, AbortSignal.timeout(30_000)]))
+      .then((data) => {
+        if (!signal.aborted) setLoaded({ ...scope, data });
+      })
+      .catch((error: unknown) => {
+        if (!signal.aborted) setLoaded({ ...scope, error: predictionError(error) });
+      });
+    return () => controller.abort();
+  }, [userId, attempt]);
+
+  const current = loaded && loaded.userId === userId && loaded.attempt === attempt && !loaded.signal.aborted
+    ? loaded
+    : undefined;
   const saved = Object.fromEntries(
-    Object.entries(allSaved).filter(([id]) => fixtureIds.has(id)),
+    Object.entries(current?.data ?? {}).filter(([id]) => kickoffs.has(id)),
   );
-  const issues = fixtures.flatMap((fixture) =>
-    rejected[fixture.id]
-      ? [
-          `${fixture.home.shortName} – ${fixture.away.shortName}: ${rejected[fixture.id]}`,
-        ]
-      : [],
-  );
-  const error =
-    storageError ||
-    (issues.length
-      ? `Pronosticuri respinse la încărcare: ${issues.join("; ")}`
-      : "");
 
-  function persist(next: Predictions): boolean {
+  async function write<T>(action: (signal: AbortSignal) => Promise<T>) {
+    const scope = current?.signal;
+    if (!current?.data || !scope || scope.aborted || inFlight.current === scope) return;
+    inFlight.current = scope;
+    setPending(scope);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-      setAllSaved(next);
-      setRejected({});
-      setStorageError("");
-      return true;
-    } catch {
-      setStorageError(
-        "Salvarea nu a reușit. Verifică dacă browserul permite stocarea locală și încearcă din nou.",
-      );
-      return false;
+      const result = await action(AbortSignal.any([scope, AbortSignal.timeout(30_000)]));
+      if (!scope.aborted) return result;
+    } catch (error) {
+      if (!scope.aborted) throw error;
+    } finally {
+      if (inFlight.current === scope) {
+        inFlight.current = null;
+        setPending(null);
+      }
     }
   }
 
-  function save(entries: Record<string, ScoreDraft>): SaveResult {
-    const result = validateEntries(entries, fixtureIds);
-    if (
-      Object.keys(result.saved).length &&
-      !persist({ ...allSaved, ...result.saved })
-    ) {
-      for (const id of Object.keys(result.saved))
-        result.rejected[id] =
-          "Salvarea pe acest dispozitiv nu a reușit. Încearcă din nou.";
+  function updateSaved(update: (data: Predictions) => Predictions) {
+    setLoaded((previous) =>
+      previous?.data && previous.signal === current?.signal
+        ? { ...previous, data: update(previous.data) }
+        : previous,
+    );
+  }
+
+  function save(entries: Record<string, ScoreDraft>) {
+    return write(async (signal) => {
+      const result = validateEntries(entries, new Set(kickoffs.keys()));
+      const valid = Object.entries(result.saved);
       result.saved = {};
-    }
-    return result;
+      let headers: Promise<Headers> | undefined;
+      for (const [id, score] of valid) {
+        if (kickoffs.get(id)! <= Date.now()) {
+          result.rejected[id] = lockedMessage;
+          continue;
+        }
+        try {
+          signal.throwIfAborted();
+          headers ??= csrfHeaders(signal);
+          result.saved[id] = await predictionApi.save(id, score, await headers, signal);
+        } catch (error) {
+          result.rejected[id] = predictionError(error);
+        }
+      }
+      updateSaved((data) => ({ ...data, ...result.saved }));
+      return result;
+    });
   }
 
   function remove(id: string) {
-    if (!fixtureIds.has(id)) return false;
-    const next = { ...allSaved };
-    delete next[id];
-    return persist(next);
+    return write(async (signal) => {
+      if (!kickoffs.has(id)) return false;
+      if (kickoffs.get(id)! <= Date.now()) throw new Error(lockedMessage);
+      await predictionApi.remove(id, signal);
+      updateSaved((data) => {
+        const next = { ...data };
+        delete next[id];
+        return next;
+      });
+      return true;
+    });
   }
 
-  return { saved, save, remove, error };
+  return {
+    saved,
+    save,
+    remove,
+    closed,
+    ready: !!current?.data,
+    busy: pending !== null && pending === current?.signal,
+    loading: !!userId && !current,
+    loadError: current?.error,
+    retry: () => setAttempt((value) => value + 1),
+  };
 }
