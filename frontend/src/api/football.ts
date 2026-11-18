@@ -1,9 +1,10 @@
 import { apiUrl } from "../config";
 import { isUuid } from "../lib/uuid";
-import { invalidResponse, isRecord, readPages } from "./page";
+import { invalidResponse, isRecord, readPage, readPages } from "./page";
 import {
   matchStatuses,
   type CompetitionView,
+  type LeaderboardRow,
   type MatchView,
   type PhaseView,
   type RoundView,
@@ -81,7 +82,21 @@ function isMatch(value: unknown): value is MatchView {
   );
 }
 
-async function getJson(path: string, signal: AbortSignal): Promise<unknown> {
+function isLeaderboardRow(value: unknown): value is LeaderboardRow {
+  return (
+    isRecord(value) &&
+    typeof value.rank === "number" &&
+    Number.isSafeInteger(value.rank) &&
+    value.rank > 0 &&
+    isUuid(value.userId) &&
+    typeof value.displayName === "string" &&
+    typeof value.totalPoints === "number" &&
+    Number.isSafeInteger(value.totalPoints) &&
+    value.totalPoints >= 0
+  );
+}
+
+export async function getJson(path: string, signal: AbortSignal): Promise<unknown> {
   let response: Response;
   try {
     response = await fetch(`${apiUrl}/api${path}`, {
@@ -130,4 +145,8 @@ export const footballApi = {
   },
   matches: (roundId: string, signal: AbortSignal) =>
     list("/matches", { roundId }, isMatch, signal),
+  async leaderboard(page: number, signal: AbortSignal) {
+    const response = await getJson(`/leaderboard/superliga?page=${page}&size=20`, signal);
+    return readPage(response, page, isLeaderboardRow);
+  },
 };

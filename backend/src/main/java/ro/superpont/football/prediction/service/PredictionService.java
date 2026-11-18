@@ -39,7 +39,7 @@ public class PredictionService {
     public PageView<PredictionView> currentPredictions(String username, int pageNumber, int size) {
         var paging = page(pageNumber, size, "id");
         var user = users.findByUsername(username).orElseThrow(PredictionService::missingAccount);
-        return PageView.of(predictions.findByUserId(user.getId(), paging).map(PredictionView::of));
+        return PageView.of(predictions.findByUserId(user.getId(), paging).map(PredictionService::view));
     }
 
     @Transactional
@@ -52,11 +52,11 @@ public class PredictionService {
         if (existing.isPresent()) {
             var prediction = existing.get();
             prediction.update(request.homeScore(), request.awayScore(), now);
-            return new SaveOutcome(PredictionView.of(prediction), false);
+            return new SaveOutcome(view(prediction), false);
         }
         var prediction = predictions.save(
                 new Prediction(user, match, request.homeScore(), request.awayScore(), now));
-        return new SaveOutcome(PredictionView.of(prediction), true);
+        return new SaveOutcome(view(prediction), true);
     }
 
     @Transactional
@@ -70,10 +70,17 @@ public class PredictionService {
 
     private Instant requireBeforeKickoff(Match match) {
         var now = clock.instant();
-        if (!now.isBefore(match.getKickoff().toInstant())) {
+        if (PredictionDeadline.hasPassed(match.getKickoff(), now)) {
             throw new DomainException(HttpStatus.CONFLICT, "Predictions are locked at kickoff");
         }
         return now;
+    }
+
+    private static PredictionView view(Prediction prediction) {
+        var match = prediction.getMatch();
+        var result = PredictionScoring.evaluate(match.getStatus(), match.getHomeScore(), match.getAwayScore(),
+                prediction.getHomeScore(), prediction.getAwayScore());
+        return PredictionView.of(prediction, result);
     }
 
     private static DomainException missingAccount() {

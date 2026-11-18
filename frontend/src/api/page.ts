@@ -6,6 +6,23 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+export function readPage<T>(response: unknown, page: number, valid: (item: unknown) => item is T): PageView<T> {
+  if (
+    !isRecord(response) ||
+    !Array.isArray(response.items) ||
+    !response.items.every(valid) ||
+    response.page !== page ||
+    typeof response.totalPages !== "number" ||
+    !Number.isSafeInteger(response.totalPages) ||
+    response.totalPages < 0 ||
+    !Number.isInteger(response.size) ||
+    !Number.isInteger(response.totalElements)
+  ) {
+    throw new Error(invalidResponse);
+  }
+  return response as unknown as PageView<T>;
+}
+
 export async function readPages<T>(
   filters: Record<string, string>,
   load: (query: URLSearchParams) => Promise<unknown>,
@@ -16,20 +33,7 @@ export async function readPages<T>(
     const response = await load(
       new URLSearchParams({ ...filters, page: String(page), size: "100" }),
     );
-    if (
-      !isRecord(response) ||
-      !Array.isArray(response.items) ||
-      !response.items.every(valid) ||
-      response.page !== page ||
-      typeof response.totalPages !== "number" ||
-      !Number.isSafeInteger(response.totalPages) ||
-      response.totalPages < 0 ||
-      !Number.isInteger(response.size) ||
-      !Number.isInteger(response.totalElements)
-    ) {
-      throw new Error(invalidResponse);
-    }
-    const data = response as unknown as PageView<T>;
+    const data = readPage(response, page, valid);
     items.push(...data.items);
     totalPages = data.totalPages;
   }

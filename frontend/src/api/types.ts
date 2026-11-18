@@ -6,6 +6,13 @@ export interface PageView<T> {
   totalPages: number;
 }
 
+export interface LeaderboardRow {
+  rank: number;
+  userId: string;
+  displayName: string;
+  totalPoints: number;
+}
+
 export interface CompetitionView {
   id: string;
   countryId: string;

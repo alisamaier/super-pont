@@ -11,8 +11,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.test.context.ActiveProfiles;
 
-@SpringBootTest(
-        properties = "spring.datasource.url=jdbc:h2:mem:devseed;MODE=PostgreSQL;DB_CLOSE_DELAY=-1")
+@SpringBootTest(properties = {
+    "spring.datasource.url=jdbc:h2:mem:devseed;MODE=PostgreSQL;DB_CLOSE_DELAY=-1",
+    "spring.flyway.placeholders.leaderboardDemo=false"
+})
 @ActiveProfiles({"dev", "test"})
 class DevelopmentSeedTests {
     @Autowired JdbcTemplate jdbc;
@@ -29,6 +31,7 @@ class DevelopmentSeedTests {
                 .isEqualTo(3);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM football_matches", Long.class))
                 .isEqualTo(4);
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users", Long.class)).isZero();
         new ResourceDatabasePopulator(new ClassPathResource("db/devdata/R__demo_superliga.sql"))
                 .execute(flyway.getConfiguration().getDataSource());
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM teams", Long.class)).isEqualTo(8);

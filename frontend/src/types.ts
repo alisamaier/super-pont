@@ -27,8 +27,15 @@ export interface Prediction {
   home: number;
   away: number;
 }
+export interface PredictionResult extends Prediction {
+  points: number;
+}
+export interface SavedPrediction extends Prediction {
+  result: PredictionResult | null;
+}
 export interface ScoreDraft {
   home: string;
   away: string;
 }
 export type Predictions = Record<string, Prediction>;
+export type SavedPredictions = Record<string, SavedPrediction>;

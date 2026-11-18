@@ -10,6 +10,9 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 32)
     private String username;
 
+    @Column(length = 64)
+    private String displayName;
+
     @Column(nullable = false, length = 254)
     private String email;
 

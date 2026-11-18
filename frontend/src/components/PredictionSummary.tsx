@@ -1,21 +1,19 @@
-import { ArrowUpRight, Check, ClipboardList, Save } from "lucide-react";
-import type { Fixture, Predictions } from "../types";
+import { Check, ClipboardList, Save } from "lucide-react";
+import type { Fixture, SavedPredictions } from "../types";
 
 export function PredictionSummary({
   saved,
   fixtures,
-  roundNumber,
+  roundLabel,
   competitionName,
-  seasonName,
   unsavedCount,
   canSave,
   onSaveAll,
 }: {
-  saved: Predictions;
+  saved: SavedPredictions;
   fixtures: readonly Fixture[];
-  roundNumber: number;
+  roundLabel: string;
   competitionName: string;
-  seasonName: string;
   unsavedCount: number;
   canSave: boolean;
   onSaveAll: () => void;
@@ -29,8 +27,9 @@ export function PredictionSummary({
       <div className="summary-heading">
         <ClipboardList size={18} />
         <h2>Biletul etapei</h2>
-        <span>#{roundNumber}</span>
+        <span>{roundLabel}</span>
       </div>
+      <p className="summary-context">{competitionName}</p>
       <div className="summary-count">
         <strong>{String(count).padStart(2, "0")}</strong>
         <span>
@@ -81,33 +80,27 @@ export function PredictionSummary({
         ) : (
           fixtures
             .filter((fixture) => saved[fixture.id])
-            .map((fixture) => (
-              <div className="saved-line" key={fixture.id}>
-                <span>{fixture.home.shortName}</span>
-                <strong>
-                  {saved[fixture.id].home}
-                  <span>:</span>
-                  {saved[fixture.id].away}
-                </strong>
-                <span>{fixture.away.shortName}</span>
-              </div>
-            ))
+            .map((fixture) => {
+              const { home, away, result } = saved[fixture.id];
+              return (
+                <div className="saved-line" key={fixture.id}>
+                  <span>{fixture.home.shortName}</span>
+                  <strong>{home}<span>:</span>{away}</strong>
+                  <span>{fixture.away.shortName}</span>
+                  <div className="saved-result">
+                    {result === null ? (
+                      <span>În așteptare</span>
+                    ) : (
+                      <>
+                        <span>Scor final {result.home}–{result.away}</span>
+                        <strong>{result.points} {result.points === 1 ? "punct" : "puncte"}</strong>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })
         )}
-      </div>
-      <div className="round-note">
-        <span className="round-note-icon">
-          <ArrowUpRight size={20} />
-        </span>
-        <div>
-          <strong>
-            Fotbalul e mai frumos
-            <br />
-            când ai un pronostic.
-          </strong>
-          <span>
-            {competitionName} · {seasonName}
-          </span>
-        </div>
       </div>
     </aside>
   );

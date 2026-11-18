@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { csrfHeaders } from "../api/auth";
 import { predictionApi } from "../api/predictions";
 import { validateEntries } from "../lib/predictions";
-import type { Fixture, Predictions, ScoreDraft } from "../types";
+import type { Fixture, SavedPredictions, ScoreDraft } from "../types";
 
 const lockedMessage = "Meciul a început. Pronosticul este blocat.";
 
@@ -19,7 +19,7 @@ export function usePredictions(userId: string | undefined, fixtures: readonly Fi
     userId: string;
     attempt: number;
     signal: AbortSignal;
-    data?: Predictions;
+    data?: SavedPredictions;
     error?: string;
   }>();
   const inFlight = useRef<AbortSignal | null>(null);
@@ -64,6 +64,44 @@ export function usePredictions(userId: string | undefined, fixtures: readonly Fi
   const saved = Object.fromEntries(
     Object.entries(current?.data ?? {}).filter(([id]) => kickoffs.has(id)),
   );
+  const snapshot = current?.data;
+  const scope = current?.signal;
+  const hasSavedInRound = Object.keys(saved).length > 0;
+  const hasStartedPredictions = Object.keys(saved).some((id) => closed.has(id));
+
+  useEffect(() => {
+    if (!snapshot || !scope || !hasSavedInRound) return;
+    const controller = new AbortController();
+    const { signal } = controller;
+    let refreshing = false;
+
+    async function refresh() {
+      if (refreshing || document.hidden || inFlight.current === scope) return;
+      refreshing = true;
+      try {
+        const data = await predictionApi.list(AbortSignal.any([signal, AbortSignal.timeout(30_000)]));
+        if (!signal.aborted && inFlight.current !== scope) {
+          setLoaded((previous) =>
+            previous && previous.signal === scope && previous.data === snapshot
+              ? { ...previous, data }
+              : previous,
+          );
+        }
+      } catch {
+        // Keep the last loaded ticket available until the next refresh.
+      } finally {
+        refreshing = false;
+      }
+    }
+
+    window.addEventListener("focus", refresh);
+    const timer = hasStartedPredictions ? window.setInterval(refresh, 60_000) : undefined;
+    return () => {
+      controller.abort();
+      window.removeEventListener("focus", refresh);
+      window.clearInterval(timer);
+    };
+  }, [snapshot, scope, hasSavedInRound, hasStartedPredictions]);
 
   async function write<T>(action: (signal: AbortSignal) => Promise<T>) {
     const scope = current?.signal;
@@ -83,7 +121,7 @@ export function usePredictions(userId: string | undefined, fixtures: readonly Fi
     }
   }
 
-  function updateSaved(update: (data: Predictions) => Predictions) {
+  function updateSaved(update: (data: SavedPredictions) => SavedPredictions) {
     setLoaded((previous) =>
       previous?.data && previous.signal === current?.signal
         ? { ...previous, data: update(previous.data) }
@@ -95,7 +133,8 @@ export function usePredictions(userId: string | undefined, fixtures: readonly Fi
     return write(async (signal) => {
       const result = validateEntries(entries, new Set(kickoffs.keys()));
       const valid = Object.entries(result.saved);
-      result.saved = {};
+      const accepted: SavedPredictions = {};
+      result.saved = accepted;
       let headers: Promise<Headers> | undefined;
       for (const [id, score] of valid) {
         if (kickoffs.get(id)! <= Date.now()) {
@@ -105,12 +144,12 @@ export function usePredictions(userId: string | undefined, fixtures: readonly Fi
         try {
           signal.throwIfAborted();
           headers ??= csrfHeaders(signal);
-          result.saved[id] = await predictionApi.save(id, score, await headers, signal);
+          accepted[id] = await predictionApi.save(id, score, await headers, signal);
         } catch (error) {
           result.rejected[id] = predictionError(error);
         }
       }
-      updateSaved((data) => ({ ...data, ...result.saved }));
+      updateSaved((data) => ({ ...data, ...accepted }));
       return result;
     });
   }

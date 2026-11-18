@@ -1,6 +1,6 @@
 import { validateScore } from "../lib/predictions";
 import { isUuid } from "../lib/uuid";
-import type { Prediction, Predictions } from "../types";
+import type { Prediction, SavedPrediction, SavedPredictions } from "../types";
 import { csrfHeaders, sessionFetch } from "./auth";
 import { invalidResponse, isRecord, readPages } from "./page";
 
@@ -8,6 +8,7 @@ interface PredictionView {
   matchId: string;
   homeScore: number;
   awayScore: number;
+  result: { homeScore: number; awayScore: number; points: number } | null;
 }
 
 function isPrediction(value: unknown): value is PredictionView {
@@ -16,12 +17,26 @@ function isPrediction(value: unknown): value is PredictionView {
     isUuid(value.matchId) &&
     [value.homeScore, value.awayScore].every(
       (score) => typeof score === "number" && !validateScore(score).error,
-    )
+    ) &&
+    (value.result === null ||
+      (isRecord(value.result) &&
+        [value.result.homeScore, value.result.awayScore].every(
+          (score) => typeof score === "number" && Number.isInteger(score) && score >= 0,
+        ) &&
+        typeof value.result.points === "number" &&
+        Number.isInteger(value.result.points) &&
+        value.result.points >= 0 &&
+        value.result.points <= 10))
   );
 }
 
-function toPrediction(value: PredictionView): Prediction {
-  return { home: value.homeScore, away: value.awayScore };
+function toPrediction(value: PredictionView): SavedPrediction {
+  const result = value.result;
+  return {
+    home: value.homeScore,
+    away: value.awayScore,
+    result: result && { home: result.homeScore, away: result.awayScore, points: result.points },
+  };
 }
 
 async function request(path: string, init: RequestInit) {
@@ -55,7 +70,7 @@ async function readJson(response: Response): Promise<unknown> {
 }
 
 export const predictionApi = {
-  async list(signal: AbortSignal): Promise<Predictions> {
+  async list(signal: AbortSignal): Promise<SavedPredictions> {
     const items = await readPages(
       {},
       async (query) =>

@@ -124,6 +124,54 @@ WHERE u.username = 'your_username'
 ORDER BY p.updated_at DESC;
 ```
 
+## Demo SuperLiga leaderboard
+
+From the repository root, run these commands in PowerShell to opt in to the
+leaderboard seed. The PostgreSQL volume must be your local development database.
+
+```powershell
+$env:LEADERBOARD_DEMO = 'true'
+podman compose up -d
+podman compose restart backend
+```
+
+Use `docker compose up -d` if you use Docker. Open
+[Clasament](http://localhost:5173/clasament) and sign in as `demo_ana` with
+`SuperPontDemo2026!` to highlight Ana's row. The sample ranks are Ana 18 (1),
+Mara 13 and Radu 13 (2), and Vlad 0 (4). To see Ana's predictions in the ticket,
+open matchday **Etapa 17** on the matches page.
+
+Click **Ana** in the leaderboard to open her current-season predictions. You can
+also open [Ana's predictions](http://localhost:5173/clasament/utilizatori/20000000-0000-0000-0000-000000000001)
+directly. To compare accounts, sign in as `demo_radu` with the same demo password.
+Ana and Radu have hidden predictions for **Etapa 18**, a scheduled game on
+20 June 2027. Their live game in **Etapa 17** shows the predicted score and
+pending points. The two finished games show the same evaluated points as
+their own tickets. The historical prediction is excluded from this page.
+
+The page refreshes at the server's kickoff deadline, on returning to the browser
+tab, and once per minute while showing predictions. Final-score corrections
+also appear on refresh.
+
+To try the visibility change immediately in the local demo, run
+`podman compose exec db psql -U superpont -d superpont` (adjust the local user
+and database if needed), then run this SQL and reopen Ana's page. After one
+minute, the page fetches the revealed prediction and editing is locked.
+
+```sql
+UPDATE football_matches
+SET kickoff = now() + INTERVAL '1 minute'
+WHERE id = '20000000-0000-0000-0000-000000000044';
+```
+
+Restore the sample kickoff afterward with
+`UPDATE football_matches SET kickoff = '2027-06-20T18:00:00Z' WHERE id = '20000000-0000-0000-0000-000000000044';`.
+
+The opt-in seed places its fixtures in the 2026/2027 demo season and adds a
+historical comparison. It preserves results and predictions already in the
+database when rerun. Remove the environment variable to disable further seed
+loading. Rows already inserted stay in the local database.
+
 ## Build and verification
 
 With the frontend environment configured as above:

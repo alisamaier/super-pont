@@ -10,6 +10,7 @@ let registrationConflict: object | undefined;
 let throttled: { path: "login" | "register"; retryAfter: string | null } | undefined;
 
 beforeEach(() => {
+  vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-01T18:00:00Z"));
   signedIn = false;
   registrationConflict = undefined;
   throttled = undefined;
@@ -27,7 +28,7 @@ beforeEach(() => {
         return signedIn ? Response.json(account) : new Response(null, { status: 401 });
       case "/api/predictions/me":
         return signedIn
-          ? Response.json(page([{ matchId: matches[0].id, homeScore: 2, awayScore: 1 }]))
+          ? Response.json(page([{ matchId: matches[0].id, homeScore: 2, awayScore: 1, result: null }]))
           : new Response(null, { status: 401 });
       case "/api/auth/csrf":
         return Response.json({ headerName: "X-CSRF-TOKEN", token: "session-csrf" });
@@ -53,6 +54,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 

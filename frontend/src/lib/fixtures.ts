@@ -1,5 +1,17 @@
-import type { MatchView, TeamView } from "../api/types";
+import type { MatchView, RoundView, TeamView } from "../api/types";
 import type { Fixture, Team } from "../types";
+
+export const matchStatusLabels = {
+  SCHEDULED: "De jucat",
+  LIVE: "În desfășurare",
+  FINISHED: "Încheiat",
+  POSTPONED: "Amânat",
+  CANCELLED: "Anulat",
+};
+
+export function matchdayLabel(round: Pick<RoundView, "number">) {
+  return `Etapa ${round.number}`;
+}
 
 const badgeColors = [
   "#215bb7",

@@ -1,15 +1,8 @@
 import { Check, MapPin, Save, Trash2 } from "lucide-react";
 import { validatePrediction } from "../lib/predictions";
+import { matchStatusLabels } from "../lib/fixtures";
 import type { Fixture, Prediction, ScoreDraft } from "../types";
 import { TeamBadge } from "./TeamBadge";
-
-const statusLabels = {
-  SCHEDULED: "De jucat",
-  LIVE: "În desfășurare",
-  FINISHED: "Încheiat",
-  POSTPONED: "Amânat",
-  CANCELLED: "Anulat",
-};
 
 interface Props {
   fixture: Fixture;
@@ -70,7 +63,7 @@ export function MatchCard({
               <Check size={12} /> Salvat
             </>
           ) : (
-            statusLabels[fixture.status]
+            matchStatusLabels[fixture.status]
           )}
         </span>
       </div>

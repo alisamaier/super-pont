@@ -24,6 +24,7 @@ services:
       - gradle_cache:/root/.gradle
     environment:
       SPRING_PROFILES_ACTIVE: dev
+      LEADERBOARD_DEMO: ${LEADERBOARD_DEMO:-false}
       DATABASE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-superpont}
       DATABASE_USERNAME: ${POSTGRES_USER:-superpont}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env}

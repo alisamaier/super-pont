@@ -58,6 +58,10 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/me", "/api/predictions/me").authenticated()
                         .requestMatchers(HttpMethod.HEAD, "/api/predictions/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/leaderboard/superliga",
+                                "/api/leaderboard/superliga/users/{userId}/predictions").permitAll()
+                        .requestMatchers(HttpMethod.HEAD, "/api/leaderboard/superliga",
+                                "/api/leaderboard/superliga/users/{userId}/predictions").permitAll()
                         .requestMatchers(HttpMethod.PUT, "/api/matches/{matchId}/prediction").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/matches/{matchId}/prediction").authenticated()
                         .requestMatchers(HttpMethod.GET, FOOTBALL_PATHS).permitAll()

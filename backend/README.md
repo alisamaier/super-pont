@@ -134,17 +134,52 @@ Base path: `/api`. JSON request/response bodies use camelCase. Creation returns
 | Matches | `GET /matches?seasonId={id}&roundId={id}`, `GET /matches/{id}`, `POST /matches` |
 | Actual result | `PUT /matches/{id}/result` |
 | My predictions | `GET /predictions/me`, `PUT /matches/{matchId}/prediction`, `DELETE /matches/{matchId}/prediction` |
+| SuperLiga leaderboard | `GET /leaderboard/superliga` |
 
 Query filters are optional. Top-level lists are paginated: `page=0&size=20`, with
 page >= 0 and size between 1 and 100. Responses contain `items`, `page`, `size`,
 `totalElements`, and `totalPages`. Phase and season-participant lists are arrays.
 Country codes and competition/phase codes are normalized to uppercase.
 
+### SuperLiga leaderboard
+
+`GET /api/leaderboard/superliga` is public. It returns a page of entries with
+`rank`, `userId`, `displayName` (the account username if no display name is set)
+and `totalPoints`. The server
+selects Romania's `RO-SUPERLIGA` season covering the current UTC date. If
+season dates overlap, the latest start date wins. With no current season or
+evaluated predictions, the page is empty.
+
+Points come from the current final results in that season. Users with the same
+total share a rank and appear in display name order. Rank applies across pages.
+
+`GET /api/leaderboard/superliga/users/{userId}/predictions?page=0&size=20`
+returns the selected user's display name, competition and season names and IDs,
+current-season `totalPoints`, `serverTime`, and a `predictions` page.
+Matchdays appear in reverse phase and round order, with later kickoffs first.
+An unknown user or missing current season returns `404`.
+
+Each prediction includes the teams, match and round IDs, round and phase labels,
+kickoff, status, visibility, and evaluation `result`. Visibility is `HIDDEN`
+before kickoff and the `predictedScore` field is omitted. At kickoff it becomes
+`REVEALED` with `predictedScore: {"home":3,"away":2}`. This uses the same
+server-clock boundary as prediction writes. The public response applies this
+rule to all viewers. Its cache policy is `no-store`.
+
+`result` is `null` while evaluation is pending. A finished match with both
+scores returns `result: {"homeScore":5,"awayScore":0,"points":10}`. Zero points
+are an evaluated result. The total and evaluation use the existing scoring
+formula and the latest stored match results.
+
 ### Predictions
 
 `GET /api/predictions/me` returns a page of the signed-in account's predictions.
 Each item contains `id`, `matchId`, `homeScore`, `awayScore`, `createdAt`, and
-`updatedAt`. Reads still include predictions after kickoff.
+`updatedAt`. Reads still include predictions after kickoff. The `result` field
+is `null` until the match is `FINISHED` with both scores. It then contains the
+final `homeScore`, `awayScore` and total `points` (0–10). Each read uses the
+current result from the match, including any corrections submitted through
+`PUT /api/matches/{id}/result`.
 
 Send `{"homeScore":0,"awayScore":2}` to `PUT /api/matches/{matchId}/prediction`
 with the session's CSRF header. Both values must be JSON integers between 0 and 99.

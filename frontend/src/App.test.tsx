@@ -18,13 +18,14 @@ import {
   seasons,
 } from "./api/football.test-data";
 import { toFixture } from "./lib/fixtures";
-import type { Predictions } from "./types";
+import type { Predictions, PredictionResult } from "./types";
 
 const fixtures = matches.slice(0, 3).map(toFixture);
 const fetcher = vi.fn<typeof fetch>();
 const storageKey = "super-pont:predictions:api-v1";
-const account = { id: "fan-id", username: "fan", email: "fan@example.test", role: "USER" };
+const account = { id: "20000000-0000-0000-0000-000000000002", username: "fan", email: "fan@example.test", role: "USER" };
 let serverPredictions: Predictions;
+let serverResults: Record<string, PredictionResult>;
 let signedIn: boolean;
 let loadStatus: number;
 let writeStatus: number;
@@ -35,6 +36,7 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/");
   localStorage.clear();
   serverPredictions = {};
+  serverResults = {};
   signedIn = true;
   loadStatus = 200;
   writeStatus = 200;
@@ -46,9 +48,15 @@ beforeEach(() => {
     expect(init?.credentials).toBe("include");
     if (url.pathname === "/api/predictions/me") {
       if (loadStatus !== 200) return new Response(null, { status: loadStatus });
-      return Response.json(page(Object.entries(serverPredictions).map(([matchId, score]) => ({
-        matchId, homeScore: score.home, awayScore: score.away,
-      }))));
+      return Response.json(page(Object.entries(serverPredictions).map(([matchId, score]) => {
+        const result = serverResults[matchId];
+        return {
+          matchId,
+          homeScore: score.home,
+          awayScore: score.away,
+          result: result ? { homeScore: result.home, awayScore: result.away, points: result.points } : null,
+        };
+      })));
     }
     expect(new Headers(init?.headers).get("X-CSRF-TOKEN")).toBe("test-csrf");
     if (writeStatus !== 200) return new Response(null, { status: writeStatus });
@@ -60,7 +68,7 @@ beforeEach(() => {
     const { homeScore, awayScore, ...rest } = JSON.parse(String(init?.body));
     expect(rest).toEqual({});
     serverPredictions[matchId] = { home: homeScore, away: awayScore };
-    return Response.json({ matchId, homeScore, awayScore });
+    return Response.json({ matchId, homeScore, awayScore, result: null });
   });
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
     const { pathname } = new URL(String(input));
@@ -323,21 +331,105 @@ async function renderRound() {
   return view;
 }
 
+it("shows pending, final and zero-point predictions in the ticket and refreshes a corrected result", async () => {
+  const [first, second, third] = fixtures;
+  serverPredictions = {
+    [first.id]: { home: 0, away: 0 },
+    [second.id]: { home: 4, away: 4 },
+    [third.id]: { home: 1, away: 1 },
+  };
+  serverResults = {
+    [first.id]: { home: 0, away: 0, points: 10 },
+    [second.id]: { home: 5, away: 0, points: 0 },
+  };
+  await renderRound();
+  const ticket = within(screen.getByRole("complementary", { name: "Rezumatul pronosticurilor" }));
+  expect(await ticket.findByText("Scor final 0–0")).toBeTruthy();
+  expect(ticket.getByText("10 puncte", { exact: true })).toBeTruthy();
+  expect(ticket.getByText("Scor final 5–0")).toBeTruthy();
+  expect(ticket.getByText("0 puncte", { exact: true })).toBeTruthy();
+  expect(ticket.getByText("În așteptare")).toBeTruthy();
+
+  serverResults[first.id] = { home: 1, away: 1, points: 8 };
+  fireEvent(window, new Event("focus"));
+  expect(await ticket.findByText("Scor final 1–1")).toBeTruthy();
+  expect(ticket.getByText("8 puncte", { exact: true })).toBeTruthy();
+  expect(ticket.queryByText("10 puncte", { exact: true })).toBeNull();
+});
+
+describe("season leaderboard", () => {
+  const rankings = [
+    { rank: 1, userId: fixtures[0].id, displayName: "Ana", totalPoints: 18 },
+    { rank: 2, userId: fixtures[1].id, displayName: "Mara", totalPoints: 13 },
+    { rank: 2, userId: account.id, displayName: "Radu", totalPoints: 13 },
+    { rank: 4, userId: fixtures[2].id, displayName: "Vlad", totalPoints: 0 },
+  ];
+
+  it("opens from navigation and highlights only the signed-in user's row", async () => {
+    fetcher.mockImplementation(async (input) =>
+      new URL(String(input)).pathname === "/api/leaderboard/superliga"
+        ? Response.json(page(rankings, 0, 20))
+        : footballResponse(input),
+    );
+    await renderRound();
+    fireEvent.click(screen.getByRole("link", { name: "Clasament" }));
+    expect(window.location.pathname).toBe("/clasament");
+    const table = await screen.findByRole("table", { name: "Clasament SuperLiga" });
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(rows.map((row) => within(row).getAllByRole("cell")[0].textContent)).toEqual(["1", "2", "2", "4"]);
+    expect(rows.map((row) => within(row).getAllByRole("cell")[1].textContent)).toEqual(["18", "13", "13", "0"]);
+    expect(rows.filter((row) => row.getAttribute("aria-current") === "true")).toEqual([rows[2]]);
+    expect(within(rows[2]).getByText("Tu")).toBeTruthy();
+  });
+
+  it("shows loading on a direct visit, then a retryable error and the empty state", async () => {
+    window.history.replaceState(null, "", "/clasament");
+    let failure = true;
+    fetcher.mockImplementation(async (input) => {
+      if (new URL(String(input)).pathname !== "/api/leaderboard/superliga") return footballResponse(input);
+      return failure ? new Response(null, { status: 503 }) : Response.json(page([], 0, 20));
+    });
+    render(<App />);
+    expect(screen.getByText("Se încarcă clasamentul…")).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain("HTTP 503");
+    failure = false;
+    fireEvent.click(screen.getByRole("button", { name: "Încearcă din nou" }));
+    expect(await screen.findByText("Încă nu există pronosticuri evaluate.")).toBeTruthy();
+  });
+});
+
 describe("backend schedule integration", () => {
   it("shows loading while fetching the catalogue and renders API fixtures", async () => {
+    fetcher.mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/seasons" && url.searchParams.get("competitionId") === competitions[0].id) {
+        const futureSeason = {
+          ...seasons[0],
+          id: "20000000-0000-0000-0000-000000000009",
+          startDate: "2027-07-01",
+          endDate: "2028-06-30",
+        };
+        return Response.json(page([futureSeason, seasons[0], seasons[1]]));
+      }
+      return footballResponse(input);
+    });
     render(<App />);
     expect(screen.getByText("Se încarcă competițiile…")).toBeTruthy();
     await screen.findByRole("article", { name: "Nord – Sud" });
     expect(screen.getAllByRole("article")).toHaveLength(3);
-    expect((screen.getByLabelText("Sezon") as HTMLSelectElement).value).toBe(
-      seasons[0].id,
-    );
-    expect(
-      screen.getByRole("option", { name: "Finale · Etapa 1" }),
-    ).toBeTruthy();
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Etapă" }).value).toBe(rounds[0].id);
+    expect(screen.getByRole("option", { name: "Etapa 16" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Etapa 17" })).toBeTruthy();
+    expect(screen.queryByText(/Demo round 16|Demo clasament/)).toBeNull();
+    expect(within(screen.getByRole("complementary", { name: "Rezumatul pronosticurilor" }))
+      .getByText("Etapa 16", { exact: true })).toBeTruthy();
+    expect(screen.queryByLabelText("Sezon")).toBeNull();
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Etapa anterioară" }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Etapa următoare" }).disabled).toBe(false);
   });
 
-  it("preserves UUID-keyed predictions through round, season and competition changes", async () => {
+  it("reopens saved matchdays and preserves UUID-keyed predictions when switching competitions", async () => {
+    serverPredictions[matches[5].id] = { home: 2, away: 2 };
     await renderRound();
     fill(0, "01", "0");
     fireEvent.click(
@@ -345,9 +437,9 @@ describe("backend schedule integration", () => {
     );
     await report();
     fill(1, "09", "");
-    fireEvent.change(screen.getByLabelText("Etapă"), {
-      target: { value: rounds[1].id },
-    });
+    const previous = screen.getByRole<HTMLButtonElement>("button", { name: "Etapa anterioară" });
+    const next = screen.getByRole<HTMLButtonElement>("button", { name: "Etapa următoare" });
+    fireEvent.change(screen.getByRole("combobox", { name: "Etapă" }), { target: { value: rounds[1].id } });
     const final = within(
       await screen.findByRole("article", { name: "Finalista A – Finalista B" }),
     );
@@ -364,22 +456,64 @@ describe("backend schedule integration", () => {
       final.getByRole("button", { name: "Salvează pronosticul" }),
     );
     await final.findByRole("button", { name: "Pronostic salvat" });
-    fireEvent.change(screen.getByLabelText("Sezon"), {
-      target: { value: seasons[1].id },
-    });
-    await screen.findByRole("article", {
-      name: "Echipa din arhivă – Oaspeți din arhivă",
-    });
-    fireEvent.change(screen.getByLabelText("Competiție"), {
-      target: { value: competitions[1].id },
-    });
+    expect(next.disabled).toBe(true);
+    expect(previous.disabled).toBe(false);
+    await screen.findByRole("region", { name: "Etapa 17" });
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Etapă" }).value).toBe(rounds[1].id);
+    expect(within(screen.getByRole("complementary", { name: "Rezumatul pronosticurilor" }))
+      .getByText("Etapa 17", { exact: true })).toBeTruthy();
+    fireEvent.click(previous);
+    await screen.findByRole("article", { name: "Nord – Sud" });
+    expect(card(0).getByRole("button", { name: "Pronostic salvat" })).toBeTruthy();
+    expect(previous.disabled).toBe(true);
+    expect(next.disabled).toBe(false);
+    fireEvent.click(next);
+    const reopenedFinal = within(await screen.findByRole("article", { name: "Finalista A – Finalista B" }));
+    expect(reopenedFinal.getByRole("button", { name: "Pronostic salvat" })).toBeTruthy();
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Etapă" }).value).toBe(rounds[1].id);
+    fireEvent.change(screen.getByRole("combobox", { name: "Etapă" }), { target: { value: rounds[0].id } });
+    await screen.findByRole("article", { name: "Nord – Sud" });
+
+    const league = screen.getByRole("tab", { name: competitions[0].name });
+    const cup = screen.getByRole("tab", { name: competitions[1].name });
+    league.focus();
+    fireEvent.keyDown(league, { key: "ArrowRight" });
+    expect(document.activeElement).toBe(cup);
+    expect(league.getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(cup);
     await screen.findByRole("article", {
       name: "Echipa de cupă – Oaspeți de cupă",
     });
-    fireEvent.change(screen.getByLabelText("Competiție"), {
-      target: { value: competitions[0].id },
-    });
+    const cupBanner = within(screen.getByRole("region", { name: "Etapa 3" }));
+    expect(cupBanner.getByText("Cupa de test", { exact: true })).toBeTruthy();
+    expect(cupBanner.getByText(/13 nov/)).toBeTruthy();
+    expect(cup.getAttribute("aria-selected")).toBe("true");
+    expect(league.getAttribute("aria-selected")).toBe("false");
+    expect(previous.disabled).toBe(true);
+    expect(next.disabled).toBe(true);
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Etapă" }).value).toBe(rounds[3].id);
+    expect(screen.queryByRole("article", { name: "Nord – Sud" })).toBeNull();
+    const cupTicket = screen.getByRole("complementary", { name: "Rezumatul pronosticurilor" });
+    expect(within(cupTicket).getByText("Cupa de test", { exact: true })).toBeTruthy();
+    expect(cupTicket.textContent).not.toContain("Cupa 2026");
+    expect(cupTicket.textContent).toContain("2:2");
+    expect(cupTicket.textContent).not.toContain("1:0");
+
+    fireEvent.click(league);
     await screen.findByRole("article", { name: "Nord – Sud" });
+    const leagueBanner = within(screen.getByRole("region", { name: "Etapa 16" }));
+    expect(leagueBanner.getByText("Liga de test", { exact: true })).toBeTruthy();
+    expect(leagueBanner.queryByText(/2026\/27/)).toBeNull();
+    expect(leagueBanner.getByText(/6 nov.*7 nov/)).toBeTruthy();
+    expect(league.getAttribute("aria-selected")).toBe("true");
+    expect(cup.getAttribute("aria-selected")).toBe("false");
+    expect(previous.disabled).toBe(true);
+    expect(next.disabled).toBe(false);
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Etapă" }).value).toBe(rounds[0].id);
+    const leagueTicket = screen.getByRole("complementary", { name: "Rezumatul pronosticurilor" });
+    expect(within(leagueTicket).getByText("Liga de test", { exact: true })).toBeTruthy();
+    expect(leagueTicket.textContent).toContain("1:0");
+    expect(leagueTicket.textContent).not.toContain("2:2");
     expect(
       (card(0).getByLabelText("Scor Nord") as HTMLInputElement).value,
     ).toBe("1");
@@ -387,6 +521,7 @@ describe("backend schedule integration", () => {
     expect(saved()).toEqual({
       [matches[0].id]: { home: 1, away: 0 },
       [matches[3].id]: { home: 3, away: 2 },
+      [matches[5].id]: { home: 2, away: 2 },
     });
   });
 
@@ -410,6 +545,58 @@ describe("backend schedule integration", () => {
     expect(screen.queryAllByRole("article")).toHaveLength(0);
   });
 
+  it("shows a lone competition in the banner without a tab row", async () => {
+    fetcher.mockResolvedValueOnce(Response.json(page([competitions[0]])));
+    await renderRound();
+    const banner = within(screen.getByRole("region", { name: "Etapa 16" }));
+    expect(banner.getByText("Liga de test")).toBeTruthy();
+    expect(screen.queryByRole("tablist")).toBeNull();
+  });
+
+  it("keeps both controls disabled when the competition has no current season", async () => {
+    vi.mocked(Date.now).mockReturnValue(Date.parse("2027-07-01T00:00:00Z"));
+    render(<App />);
+    await screen.findByText("Această competiție nu are un sezon în desfășurare.");
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Etapa anterioară" }).disabled).toBe(true);
+    expect(screen.getByRole<HTMLButtonElement>("button", { name: "Etapa următoare" }).disabled).toBe(true);
+    expect(screen.queryByRole("article")).toBeNull();
+  });
+
+  it("clears the previous competition while loading and ignores a late season response", async () => {
+    await renderRound();
+    let finish!: (response: Response) => void;
+    let signal: AbortSignal | null | undefined;
+    fetcher.mockImplementation((input, init) => {
+      const url = new URL(String(input));
+      if (
+        url.pathname === "/api/seasons" &&
+        url.searchParams.get("competitionId") === competitions[1].id
+      ) {
+        signal = init?.signal;
+        return new Promise<Response>((resolve) => {
+          finish = resolve;
+        });
+      }
+      return Promise.resolve(footballResponse(input));
+    });
+    const cup = screen.getByRole("tab", { name: competitions[1].name });
+    fireEvent.click(cup);
+    expect(cup.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("Se încarcă sezoanele…")).toBeTruthy();
+    const banner = within(screen.getByRole("region", { name: "Programul meciurilor" }));
+    expect(banner.getByText("Cupa de test")).toBeTruthy();
+    expect(banner.queryByText(/Liga de test/)).toBeNull();
+    expect(screen.queryAllByRole("article")).toHaveLength(0);
+    expect(screen.queryByRole("complementary", { name: "Rezumatul pronosticurilor" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: competitions[0].name }));
+    expect(signal?.aborted).toBe(true);
+    await act(async () => finish(Response.json(page([seasons[2]]))));
+    expect(await screen.findByRole("article", { name: "Nord – Sud" })).toBeTruthy();
+    expect(screen.queryByRole("article", { name: "Echipa de cupă – Oaspeți de cupă" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Etapa 16" })).toBeTruthy();
+  });
+
   it("ignores an outdated match response after selecting another round", async () => {
     await renderRound();
     let finish!: (response: Response) => void;
@@ -427,13 +614,15 @@ describe("backend schedule integration", () => {
       }
       return Promise.resolve(footballResponse(input));
     });
-    fireEvent.change(screen.getByLabelText("Etapă"), {
-      target: { value: rounds[1].id },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Etapa următoare" }));
     expect(screen.queryAllByRole("article")).toHaveLength(0);
-    fireEvent.change(screen.getByLabelText("Etapă"), {
-      target: { value: rounds[0].id },
-    });
+    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Etapă" }).value).toBe(rounds[1].id);
+    expect(screen.getByRole("region", { name: "Etapa 17" }).getAttribute("aria-busy")).toBe("true");
+    expect(screen.getByText("Se încarcă meciurile…")).toBeTruthy();
+    expect(screen.queryByRole("complementary", { name: "Rezumatul pronosticurilor" })).toBeNull();
+    expect(screen.queryByLabelText("Filtrează după zi")).toBeNull();
+    expect(document.querySelector(".round-dates")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Etapa anterioară" }));
     expect(signal?.aborted).toBe(true);
     await act(async () => {
       finish(Response.json(page([matches[3]])));
@@ -444,6 +633,35 @@ describe("backend schedule integration", () => {
     expect(
       screen.queryByRole("article", { name: "Finalista A – Finalista B" }),
     ).toBeNull();
+  });
+
+  it("ignores an earlier response for the same matchday after rapid 16–17–16–17 navigation", async () => {
+    await renderRound();
+    const requests: { signal: AbortSignal | null | undefined; finish: (response: Response) => void }[] = [];
+    fetcher.mockImplementation((input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/matches" && url.searchParams.get("roundId") === rounds[1].id) {
+        return new Promise<Response>((finish) => requests.push({ signal: init?.signal, finish }));
+      }
+      return Promise.resolve(footballResponse(input));
+    });
+    const selector = screen.getByRole<HTMLSelectElement>("combobox", { name: "Etapă" });
+    fireEvent.change(selector, { target: { value: rounds[1].id } });
+    fireEvent.change(selector, { target: { value: rounds[0].id } });
+    fireEvent.click(screen.getByRole("button", { name: "Etapa următoare" }));
+    expect(requests).toHaveLength(2);
+    expect(requests[0].signal?.aborted).toBe(true);
+    await act(async () => requests[0].finish(Response.json(page([matches[3]]))));
+    expect(selector.value).toBe(rounds[1].id);
+    expect(screen.getByText("Se încarcă meciurile…")).toBeTruthy();
+    expect(screen.queryAllByRole("article")).toHaveLength(0);
+    await act(async () => requests[1].finish(Response.json(page([matches[3]]))));
+    await screen.findByRole("article", { name: "Finalista A – Finalista B" });
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+    expect(screen.getByRole("region", { name: "Etapa 17" }).getAttribute("aria-busy")).toBe("false");
+    expect(within(screen.getByRole("complementary", { name: "Rezumatul pronosticurilor" }))
+      .getByText("Etapa 17", { exact: true })).toBeTruthy();
+    expect(screen.queryByLabelText("Filtrează după zi")).toBeNull();
   });
 
   it("ignores and preserves legacy predictions, including UUID-keyed browser saves", async () => {

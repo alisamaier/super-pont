@@ -1,9 +1,10 @@
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useId, useState, type MouseEvent } from "react";
 import {
   ArrowRight,
   CalendarDays,
   Check,
   CheckCheck,
+  ChevronLeft,
   ChevronRight,
   CircleDot,
   ClipboardList,
@@ -17,12 +18,14 @@ import {
 } from "lucide-react";
 import { useFootballSchedule } from "./hooks/useFootballSchedule";
 import { predictionError, usePredictions } from "./hooks/usePredictions";
-import { fixtureDays } from "./lib/fixtures";
+import { fixtureDays, matchdayLabel } from "./lib/fixtures";
 import { pendingDrafts, type SaveResult } from "./lib/predictions";
 import { MatchCard } from "./components/MatchCard";
+import { LeaderboardPage } from "./components/LeaderboardPage";
+import { UserPredictionsPage } from "./components/UserPredictionsPage";
 import { PredictionSummary } from "./components/PredictionSummary";
 import { SaveReport } from "./components/SaveReport";
-import { ScheduleSelect } from "./components/ScheduleSelect";
+import { CompetitionTabs } from "./components/CompetitionTabs";
 import type { ScoreDraft } from "./types";
 import { authErrorMessage, getCurrentUser, logout, type AuthUser } from "./api/auth";
 import { AuthPage } from "./components/AuthPage";
@@ -30,14 +33,19 @@ import "./App.css";
 import "./components/Auth.css";
 
 function App() {
-  const [path, setPath] = useState(() => window.location.pathname);
+  const [path, setPath] = useState(() => window.location.pathname + window.location.search);
+  const location = new URL(path, window.location.origin);
   const authPage = path === "/login" || path === "/register" ? path : null;
+  const selectedUserId = /^\/clasament\/utilizatori\/([^/]+)$/.exec(location.pathname)?.[1];
+  const leaderboardPage = location.pathname === "/clasament" || !!selectedUserId;
+  const requestedPage = Number(location.searchParams.get("page") ?? "0");
+  const leaderboardPageNumber = Number.isSafeInteger(requestedPage) && requestedPage >= 0 ? requestedPage : 0;
   const [user, setUser] = useState<AuthUser | null>();
   const [registeredUsername, setRegisteredUsername] = useState("");
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
-    const syncPath = () => setPath(window.location.pathname);
+    const syncPath = () => setPath(window.location.pathname + window.location.search);
     window.addEventListener("popstate", syncPath);
     return () => window.removeEventListener("popstate", syncPath);
   }, []);
@@ -53,7 +61,7 @@ function App() {
   }, []);
 
   function navigate(destination: string) {
-    if (window.location.pathname !== destination) {
+    if (window.location.pathname + window.location.search !== destination) {
       window.history.pushState(null, "", destination);
     }
     setPath(destination);
@@ -80,7 +88,18 @@ function App() {
   }
 
   const catalog = useFootballSchedule();
-  const { competition, season, round, phase } = catalog;
+  const { competition, season, round, selectedRoundId, rounds, previousRound, nextRound } = catalog;
+  const competitionPanelId = useId();
+  const competitions = catalog.competitions.data ?? [];
+  const showCompetitionTabs = competition && competitions.length > 1;
+  const roundTitle = round ? matchdayLabel(round) : "Programul meciurilor";
+  const schedule = catalog.schedule.data;
+  const repeatedRoundNumber = round && schedule?.rounds.some(
+    (item) => item.id !== round.id && item.number === round.number,
+  );
+  const phaseName = repeatedRoundNumber
+    ? schedule?.phases.find((phase) => phase.id === round?.phaseId)?.name
+    : undefined;
   const fixtures = catalog.matches.data ?? [];
   const days = fixtureDays(fixtures);
   const predictions = usePredictions(user?.id, fixtures);
@@ -128,7 +147,7 @@ function App() {
   const empty = !competition
     ? "Nu sunt competiții disponibile."
     : !season
-      ? "Această competiție nu are sezoane."
+      ? "Această competiție nu are un sezon în desfășurare."
       : !round
         ? "Acest sezon nu are etape."
         : !fixtures.length
@@ -151,6 +170,12 @@ function App() {
     setSaveResult(null);
     setRemoveError(null);
     setNotification(null);
+  }
+
+  function changeRound(id: string | undefined) {
+    if (!id) return;
+    catalog.selectRound(id);
+    setDay("all");
   }
 
   async function saveEntries(entries: Record<string, ScoreDraft>) {
@@ -202,8 +227,8 @@ function App() {
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href={authPage ? "#auth-content" : "#matches"}>
-        {authPage ? "Sari la cont" : "Sari la meciuri"}
+      <a className="skip-link" href={authPage ? "#auth-content" : selectedUserId ? "#user-predictions" : leaderboardPage ? "#clasament" : "#matches"}>
+        {authPage ? "Sari la cont" : leaderboardPage ? "Sari la clasament" : "Sari la meciuri"}
       </a>
       <header className="site-header">
         <div className="header-inner">
@@ -227,8 +252,8 @@ function App() {
           </a>
           <nav className="main-nav" aria-label="Navigare principală">
             <button
-              className={view === "all" ? "nav-item active" : "nav-item"}
-              aria-pressed={view === "all"}
+              className={view === "all" && !leaderboardPage ? "nav-item active" : "nav-item"}
+              aria-pressed={view === "all" && !leaderboardPage}
               onClick={() => {
                 navigate("/");
                 setView("all");
@@ -239,8 +264,8 @@ function App() {
               Meciuri
             </button>
             <button
-              className={view === "saved" ? "nav-item active" : "nav-item"}
-              aria-pressed={view === "saved"}
+              className={view === "saved" && !leaderboardPage ? "nav-item active" : "nav-item"}
+              aria-pressed={view === "saved" && !leaderboardPage}
               onClick={() => {
                 navigate("/");
                 setView("saved");
@@ -250,6 +275,15 @@ function App() {
               <ClipboardList size={16} />
               Pronosticurile mele<span className="nav-count">{count}</span>
             </button>
+            <a
+              className={leaderboardPage ? "nav-item active" : "nav-item"}
+              href="/clasament"
+              aria-current={leaderboardPage ? "page" : undefined}
+              onClick={(event) => followLink(event, "/clasament")}
+            >
+              <Trophy size={16} aria-hidden="true" />
+              Clasament
+            </a>
           </nav>
           <nav className="account-nav" aria-label="Cont" aria-busy={user === undefined}>
             {user ? (
@@ -288,106 +322,104 @@ function App() {
           }}
         />
       )}
-      <main className="main-container" hidden={authPage !== null}>
-        <div className="breadcrumb">
-          <span>Fotbal</span>
-          <ChevronRight size={12} />
-          <span>{competition?.name ?? "Competiții"}</span>
-          <ChevronRight size={12} />
-          <strong>{season?.name ?? "Program"}</strong>
-        </div>
-        <section className="round-banner" aria-labelledby="round-title">
-          <img src="/stadium.jpg" alt="" className="stadium-image" />
-          <div className="round-content">
-            <div className="league-label">
-              <Trophy size={15} />
-              {competition?.name ?? "Fotbal"}
-              {phase && (
-                <>
-                  <span>·</span>
-                  {phase.name}
-                </>
-              )}
-            </div>
-            <h1 id="round-title">
-              {round ? `Etapa ${round.number}` : "Programul meciurilor"}
-              {round && <span>{round.name}</span>}
-            </h1>
-            <div className="round-dates">
-              <CalendarDays size={15} />
-              {season ? `SEZON ${season.name}` : "COMPETIȚII"}
-              {days.length > 0 && (
-                <>
-                  <span className="banner-divider" />
-                  {days[0].date}
-                  {days.length > 1 && ` – ${days[days.length - 1].date}`}
-                </>
-              )}
-            </div>
-          </div>
-          {round && (
-            <span className="banner-round-number" aria-hidden="true">
-              {String(round.number).padStart(2, "0")}
-            </span>
-          )}
-        </section>
-
-        <div
-          className="schedule-selectors"
-          role="group"
-          aria-label="Programul competițiilor"
-        >
-          <ScheduleSelect
-            label="Competiție"
-            value={competition?.id}
-            options={catalog.competitions.data}
-            emptyLabel="Nicio competiție"
-            onChange={(id) => {
+      {leaderboardPage && (selectedUserId ? (
+        <UserPredictionsPage key={selectedUserId} userId={selectedUserId}
+          leaderboardPage={leaderboardPageNumber} onNavigate={followLink} />
+      ) : (
+        <LeaderboardPage currentUserId={user?.id} page={leaderboardPageNumber} onNavigate={followLink} />
+      ))}
+      <main className="main-container matchday-page" hidden={authPage !== null || leaderboardPage}>
+        {showCompetitionTabs && (
+          <CompetitionTabs
+            competitions={competitions}
+            activeId={competition.id}
+            panelId={competitionPanelId}
+            onSelect={(id) => {
+              if (id === competition.id) return;
               catalog.selectCompetition(id);
               setDay("all");
             }}
           />
-          <ScheduleSelect
-            label="Sezon"
-            value={season?.id}
-            options={catalog.seasons.data}
-            emptyLabel="Niciun sezon"
-            onChange={(id) => {
-              catalog.selectSeason(id);
-              setDay("all");
-            }}
-          />
-          <ScheduleSelect
-            label="Etapă"
-            value={round?.id}
-            options={catalog.schedule.data?.rounds.map((item) => ({
-              id: item.id,
-              name: `${catalog.schedule.data?.phases.find((candidate) => candidate.id === item.phaseId)?.name ?? "Etapă"} · ${item.name}`,
-            }))}
-            emptyLabel="Nicio etapă"
-            onChange={(id) => {
-              catalog.selectRound(id);
-              setDay("all");
-            }}
-          />
-        </div>
-
-        <div className="content-layout">
+        )}
+        <div
+          className="content-layout"
+          id={showCompetitionTabs ? competitionPanelId : undefined}
+          role={showCompetitionTabs ? "tabpanel" : undefined}
+          aria-labelledby={showCompetitionTabs ? `${competitionPanelId}-${competition.id}` : undefined}
+          tabIndex={showCompetitionTabs ? 0 : undefined}
+        >
+          <section className="round-banner" aria-labelledby="round-title" aria-busy={catalog.matches.loading}>
+            <img src="/stadium.jpg" alt="" className="stadium-image" />
+            <div className="round-content">
+              {competition && (
+                <p className="league-label">
+                  <Trophy size={15} aria-hidden="true" />
+                  <span>{competition.name}</span>
+                </p>
+              )}
+              <h1 id="round-title">{roundTitle}</h1>
+              {phaseName && <p className="round-detail">{phaseName}</p>}
+              {days.length > 0 && (
+                <p className="round-dates">
+                  <CalendarDays size={15} aria-hidden="true" />
+                  <span>{days[0].date}{days.length > 1 && ` – ${days[days.length - 1].date}`}</span>
+                </p>
+              )}
+            </div>
+          </section>
           <section
             className="fixtures-section"
             id="matches"
             aria-labelledby="matches-title"
+            aria-busy={catalog.matches.loading}
           >
             <div className="fixtures-heading">
-              <div>
-                <div className="section-eyebrow">
-                  ALEGE SCORUL. SIMTE MECIUL.
+              <h2 id="matches-title">
+                {view === "all" ? "Meciurile etapei" : "Pronosticurile mele"}
+                {view === "saved" && <span>{count}</span>}
+              </h2>
+              {competition && (
+                <div className="matchday-controls" role="group" aria-label="Navigare etape">
+                  <button
+                    type="button"
+                    aria-label="Etapa anterioară"
+                    title="Etapa anterioară"
+                    disabled={!previousRound}
+                    onClick={() => changeRound(previousRound?.id)}
+                  >
+                    <ChevronLeft size={17} aria-hidden="true" />
+                  </button>
+                  <select
+                    aria-label="Etapă"
+                    value={selectedRoundId ?? ""}
+                    disabled={!rounds?.length}
+                    onChange={(event) => changeRound(event.target.value)}
+                  >
+                    {!selectedRoundId && <option value="">Etapă</option>}
+                    {rounds?.map((item) => {
+                      const repeatedNumber = rounds.some(
+                        (candidate) => candidate.id !== item.id && candidate.number === item.number,
+                      );
+                      const phase = repeatedNumber
+                        ? schedule?.phases.find((candidate) => candidate.id === item.phaseId) : undefined;
+                      return (
+                        <option key={item.id} value={item.id}>
+                          {matchdayLabel(item)}{phase && ` · ${phase.name}`}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <button
+                    type="button"
+                    aria-label="Etapa următoare"
+                    title="Etapa următoare"
+                    disabled={!nextRound}
+                    onClick={() => changeRound(nextRound?.id)}
+                  >
+                    <ChevronRight size={17} aria-hidden="true" />
+                  </button>
                 </div>
-                <h2 id="matches-title">
-                  {view === "all" ? "Meciurile etapei" : "Pronosticurile mele"}
-                  <span>{view === "all" ? fixtures.length : count}</span>
-                </h2>
-              </div>
+              )}
               {fixtures.length > 0 && (
                 <span className="timezone">
                   <CircleDot size={13} />
@@ -533,13 +565,12 @@ function App() {
               )
             )}
           </section>
-          {round && competition && season && (
+          {round && competition && catalog.matches.data && (
             <PredictionSummary
               saved={saved}
               fixtures={fixtures}
-              roundNumber={round.number}
+              roundLabel={roundTitle}
               competitionName={competition.name}
-              seasonName={season.name}
               unsavedCount={unsavedIds.length}
               canSave={canEdit && unsavedIds.some((id) => !closed.has(id))}
               onSaveAll={() => saveEntries(unsaved)}

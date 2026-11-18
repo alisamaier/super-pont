@@ -84,12 +84,12 @@ const phases: PhaseView[] = [
     lossPoints: 0,
   },
 ];
-export const rounds: RoundView[] = phases.map((phase, index) => ({
+export const rounds: RoundView[] = [16, 17, 9, 3].map((number, index) => ({
   id: id(30 + index),
-  seasonId: phase.seasonId,
-  phaseId: phase.id,
-  number: 1,
-  name: "Etapa 1",
+  seasonId: phases[index].seasonId,
+  phaseId: phases[index].id,
+  number,
+  name: index === 0 ? "Demo round 16" : index === 1 ? "Demo clasament" : `Etapa ${number}`,
 }));
 
 function team(value: number, name: string, shortName: string): TeamView {
@@ -107,7 +107,7 @@ function match(
     seasonId: round.seasonId,
     homeTeam: team(value + 100, home, home.slice(0, 3)),
     awayTeam: team(value + 200, away, away.slice(0, 3)),
-    kickoff: `2026-11-${value === 42 ? "07" : "06"}T18:00:00Z`,
+    kickoff: `2026-11-${value === 45 ? "13" : value === 42 ? "07" : "06"}T18:00:00Z`,
     venue: "Arena de test",
     status: "SCHEDULED",
     homeScore: null,

@@ -162,7 +162,7 @@ class FootballApiTests {
 
     @Test
     void migrationsRunWithoutDevelopmentSeeds() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("3");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("4");
         assertThat(
                         jdbc.queryForObject(
                                 "SELECT COUNT(*) FROM competitions WHERE code = 'RO-SUPERLIGA'",
@@ -230,6 +230,35 @@ class FootballApiTests {
             var afterDelete = mapper.readTree(fan.request("GET", "/predictions/me", null, null).body());
             assertThat(afterDelete.get("totalElements").asInt()).isZero();
         }
+    }
+
+    @Test
+    void evaluatesSavedPredictionsFromTheLatestFinalResult() throws Exception {
+        when(clock.instant()).thenReturn(Instant.parse("2026-11-06T15:00:00Z"));
+        String matchId = create("/matches", match());
+        String matchPath = "/matches/" + matchId;
+        var saved = request("PUT", matchPath + "/prediction", Map.of("homeScore", 0, "awayScore", 0));
+        assertThat(saved.status()).as(saved.body().toString()).isEqualTo(201);
+        assertThat(saved.body().get("result").isNull()).isTrue();
+
+        assertThat(request("PUT", matchPath + "/result",
+                Map.of("status", "LIVE", "homeScore", 0, "awayScore", 0)).status()).isEqualTo(200);
+        assertThat(request("GET", "/predictions/me", null).body().at("/items/0/result").isNull()).isTrue();
+
+        assertThat(request("PUT", matchPath + "/result",
+                Map.of("status", "FINISHED", "homeScore", 0, "awayScore", 0)).status()).isEqualTo(200);
+        var evaluated = request("GET", "/predictions/me", null).body();
+        assertThat(evaluated.at("/items/0/result"))
+                .isEqualTo(mapper.readTree("{\"homeScore\":0,\"awayScore\":0,\"points\":10}"));
+
+        assertThat(request("PUT", matchPath + "/result",
+                Map.of("status", "FINISHED", "homeScore", 0, "awayScore", 5)).status()).isEqualTo(200);
+        var corrected = request("GET", "/predictions/me", null).body();
+        assertThat(corrected.get("totalElements").asInt()).isEqualTo(1);
+        assertThat(corrected.at("/items/0/id")).isEqualTo(saved.body().get("id"));
+        assertThat(corrected.at("/items/0/updatedAt")).isEqualTo(saved.body().get("updatedAt"));
+        assertThat(corrected.at("/items/0/result"))
+                .isEqualTo(mapper.readTree("{\"homeScore\":0,\"awayScore\":5,\"points\":0}"));
     }
 
     @Test
