@@ -7,11 +7,14 @@ import ro.superpont.common.BaseEntity;
 @Entity
 @Table(name = "users")
 public class User extends BaseEntity {
-    @Column(nullable = false, length = 32)
-    private String username;
-
-    @Column(length = 64)
+    @Column(nullable = false, length = 64)
     private String displayName;
+
+    @Column(nullable = false)
+    private boolean hidePredictionsUntilKickoff;
+
+    @Column(nullable = false)
+    private long passwordVersion;
 
     @Column(nullable = false, length = 254)
     private String email;
@@ -28,16 +31,37 @@ public class User extends BaseEntity {
 
     protected User() {}
 
-    public User(String username, String email, String passwordHash) {
-        this.username = username;
+    public User(String displayName, String email, String passwordHash) {
+        this.displayName = displayName;
         this.email = email;
         this.passwordHash = passwordHash;
         this.role = Role.USER;
         this.createdAt = Instant.now();
     }
 
-    public String getUsername() {
-        return username;
+    public String getDisplayName() {
+        return displayName;
+    }
+
+    public void setDisplayName(String displayName) {
+        this.displayName = displayName;
+    }
+
+    public long getPasswordVersion() {
+        return passwordVersion;
+    }
+
+    public void changePassword(String passwordHash) {
+        this.passwordHash = passwordHash;
+        this.passwordVersion++;
+    }
+
+    public boolean isHidePredictionsUntilKickoff() {
+        return hidePredictionsUntilKickoff;
+    }
+
+    public void setHidePredictionsUntilKickoff(boolean hidePredictionsUntilKickoff) {
+        this.hidePredictionsUntilKickoff = hidePredictionsUntilKickoff;
     }
 
     public String getEmail() {

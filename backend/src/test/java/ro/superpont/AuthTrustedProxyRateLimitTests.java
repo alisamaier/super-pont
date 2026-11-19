@@ -22,12 +22,12 @@ class AuthTrustedProxyRateLimitTests {
     @Autowired JsonMapper json;
 
     @Test
-    void capsOneUsernameAcrossClientIpsRecognizedFromATrustedProxy() throws Exception {
+    void capsOneEmailAcrossClientIpsRecognizedFromATrustedProxy() throws Exception {
         try (var session = new TestHttpSession(port, json)) {
             String csrf = session.csrf();
             for (int i = 1; i <= 5; i++) {
-                String username = i % 2 == 0 ? "TARGET" : "target";
-                assertThat(session.request("POST", "/auth/login", login(username), csrf,
+                String email = i % 2 == 0 ? "  TARGET@example.test  " : "target@example.test";
+                assertThat(session.request("POST", "/auth/login", login(email), csrf,
                         Map.of("X-Forwarded-For", "192.0.2." + i)).statusCode()).isEqualTo(401);
             }
             var sixthIp = Map.of("X-Forwarded-For", "192.0.2.6");

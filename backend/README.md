@@ -53,14 +53,45 @@ database; use separate development and production databases.
 | Method and path | Input and response |
 | --- | --- |
 | `GET /api/auth/csrf` | Starts or reuses a session and returns `headerName` and `token` (plus `parameterName`). |
-| `POST /api/auth/register` | JSON `username`, `email`, `password`. Returns `200` and a profile. Sign in separately. |
-| `POST /api/auth/login` | JSON `username`, `password`. Returns `200` and a profile, and rotates the session ID. |
+| `POST /api/auth/register` | JSON `displayName`, `email`, `password`. Returns `200` and a profile. Sign in separately. |
+| `POST /api/auth/login` | JSON `email`, `password`. Returns `200` and a profile, and rotates the session ID. |
 | `POST /api/auth/logout` | Invalidates the session and returns `204`. |
 | `GET /api/users/me` | Returns the signed-in profile, or `401`. |
+| `GET /api/users/me/settings` | Returns the saved `hidePredictionsUntilKickoff` boolean for the signed-in account, or `401`. |
+| `PUT /api/users/me/settings` | JSON `hidePredictionsUntilKickoff` (required boolean). Session and CSRF required; returns `200` and the saved settings. |
+| `PUT /api/users/me/profile` | JSON `displayName`. Session and CSRF required; returns `200` and the updated profile. |
+| `PUT /api/users/me/password` | JSON `currentPassword`, `newPassword`. Session and CSRF required; returns `204`, clears the current session cookie, and revokes all previous sessions. |
 
-Profiles contain `id`, `username`, `email`, `role`, and `createdAt`.
-Usernames use 3–32 ASCII letters, digits, or underscores. Usernames and emails
-are stored in lowercase and are unique regardless of capitalization. Passwords
+Own-account profiles contain `id`, `displayName`, `email`, `role`, and `createdAt`.
+Registration and profile updates strip surrounding whitespace and require a
+nonblank public name of at most 64 characters. Names are not unique. The Romanian
+UI labels this field **Nume**; changing it does not change the login email.
+Ownership and navigation use stable account UUIDs. Leaderboard and other-user
+prediction responses contain public names and UUIDs, never email addresses.
+
+Settings are stored separately from the session. Flyway V6 changes the default
+to `false` for new accounts without changing any existing saved preferences. Only the session's
+account can be updated; no target user ID is accepted as an authority. Settings
+responses use `Cache-Control: no-store`. A change applies to every existing and
+future prediction on subsequent reads, without changing the editing deadline.
+
+Password changes verify the current password using the existing BCrypt encoder.
+The new password follows registration rules (nonblank, 8–72 characters, at most
+72 UTF-8 bytes) and is BCrypt-hashed before storage. An incorrect current password
+returns `400` without changing credentials or sessions. Account operations determine
+the user exclusively from the session, and do not accept another account's ID.
+
+Each session principal records the password version used during authentication.
+A successful password change atomically increments the persisted version. A security
+filter checks that version on every authenticated request, including across instances
+using the same database. Old sessions receive `401` and are invalidated when used;
+the changing session is logged out immediately. Re-login requires the new password.
+No refresh tokens are used. Already-running requests are not cancelled, and remote
+session records may remain until their next request or timeout; they cannot authorize
+new requests. This does not replace node-local HTTP sessions with a shared session store.
+Registration and login normalize emails with Java `strip()` and lowercase using
+`Locale.ROOT`. Registration requires a valid email of at most 254 characters.
+The database enforces normalized, nonblank, unique email addresses. Passwords
 require at least eight characters and allow up to 72 UTF-8 bytes. Accounts
 created through registration receive the `USER` role.
 
@@ -69,25 +100,39 @@ endpoint with the same cookie jar and send the returned token as the
 `X-CSRF-TOKEN` header. Get a fresh token after login or logout. Validation errors
 return `400`, invalid credentials return `401`, missing or invalid CSRF tokens
 return `403`, and registration conflicts return `409` with field messages under
-`errors.username` and/or `errors.email`. Both conflicts can appear in the same
-response. These field errors disclose which identifiers are already registered.
+`errors.email`. This field error discloses whether an email is already registered.
+
+### Migrating existing accounts to email login
+
+Flyway Java migration V7 validates all legacy emails before writing anything. It
+reports account UUIDs with missing/invalid emails or duplicate normalized emails
+and stops so an operator can resolve those records without merging or deleting
+accounts automatically. It normalizes valid emails and copies legacy usernames
+into missing public names. V8 then installs the normalized-email constraints and
+removes the obsolete username column. Account UUIDs, password hashes, predictions,
+points and visibility preferences are preserved.
+
+V7 increments every existing account's password version, requiring a new login
+after deployment. Session principals now identify accounts by UUID. No password
+reset is needed: sign in with the existing email and password. Take a backup and
+resolve any reported conflicts before retrying migration on an existing database.
 
 ### Authentication rate limits
 
 | Scope | Default and `prod` | `dev` |
 | --- | --- | --- |
 | Login per client IP | 5 per rolling minute | 10 per rolling minute |
-| Login per case-insensitive username | 5 per rolling minute | 5 per rolling minute |
+| Login per normalized email | 5 per rolling minute | 5 per rolling minute |
 | Registration per client IP | 3 per rolling 10 minutes | 5 per rolling minute |
 
 Configure each quota with `attempts` and `window` under
-`app.auth.rate-limit.login-ip`, `app.auth.rate-limit.login-username`, or
+`app.auth.rate-limit.login-ip`, `app.auth.rate-limit.login-email`, or
 `app.auth.rate-limit.registration-ip`. Windows accept values such as `1m` or
 `10m`. Spring loads the development overrides from `application-dev.yml` when
 the `dev` profile is active.
 
 CSRF-valid requests count toward the IP limit before body validation. Login
-requests that pass IP and body validation also count toward the username limit,
+requests that pass IP and body validation also count toward the email limit,
 whether the credentials succeed or fail. Rejected requests return `429` with
 `Retry-After` in seconds. The frontend displays the wait time.
 
@@ -111,7 +156,7 @@ Football schedule reads are public. Schedule and result writes require an
 against the local development database with a database operator account:
 
 ```sql
-UPDATE users SET role = 'ADMIN' WHERE username = 'local_admin';
+UPDATE users SET role = 'ADMIN' WHERE email = 'local_admin@example.test';
 ```
 
 Sign in again after changing the role. Sessions expire after 30 minutes of
@@ -143,28 +188,35 @@ Country codes and competition/phase codes are normalized to uppercase.
 
 ### SuperLiga leaderboard
 
-`GET /api/leaderboard/superliga` is public. It returns a page of entries with
-`rank`, `userId`, `displayName` (the account username if no display name is set)
+`GET /api/leaderboard/superliga` requires a signed-in session. It returns a page of entries with
+`rank`, `userId`, `displayName`
 and `totalPoints`. The server
 selects Romania's `RO-SUPERLIGA` season covering the current UTC date. If
 season dates overlap, the latest start date wins. With no current season or
-evaluated predictions, the page is empty.
+registered accounts, the page is empty. Every registered account appears in the
+current-season leaderboard, including accounts without predictions or evaluated
+results, starting at zero points. New registrations appear on the next read.
 
 Points come from the current final results in that season. Users with the same
 total share a rank and appear in display name order. Rank applies across pages.
 
 `GET /api/leaderboard/superliga/users/{userId}/predictions?page=0&size=20`
-returns the selected user's display name, competition and season names and IDs,
+also requires a signed-in session and returns the selected user's display name, competition and season names and IDs,
 current-season `totalPoints`, `serverTime`, and a `predictions` page.
 Matchdays appear in reverse phase and round order, with later kickoffs first.
 An unknown user or missing current season returns `404`.
 
 Each prediction includes the teams, match and round IDs, round and phase labels,
-kickoff, status, visibility, and evaluation `result`. Visibility is `HIDDEN`
-before kickoff and the `predictedScore` field is omitted. At kickoff it becomes
-`REVEALED` with `predictedScore: {"home":3,"away":2}`. This uses the same
-server-clock boundary as prediction writes. The public response applies this
-rule to all viewers. Its cache policy is `no-store`.
+kickoff, status, visibility, and evaluation `result`. Before kickoff, visibility
+is `HIDDEN` when the owner has `hidePredictionsUntilKickoff=true`; `predictedScore`
+is omitted and `result` is null. With the setting disabled, saved scores are
+`REVEALED` immediately with `predictedScore: {"home":3,"away":2}`. At kickoff,
+scores are revealed regardless of the preference, using the same server-clock
+boundary as prediction writes. An authenticated owner always sees their own
+scores, including on this endpoint; send the session cookie for that exception.
+Unauthenticated GET and HEAD requests to either endpoint return `401`, including
+after logout. Send the session cookie from the frontend. Responses use `no-store`,
+and each request reads the owner's persisted preference.
 
 `result` is `null` while evaluation is pending. A finished match with both
 scores returns `result: {"homeScore":5,"awayScore":0,"points":10}`. Zero points

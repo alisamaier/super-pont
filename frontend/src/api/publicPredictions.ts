@@ -67,6 +67,7 @@ function isPublicPrediction(value: unknown): value is PublicPrediction {
 export async function getPublicPredictions(userId: string, page: number, signal: AbortSignal): Promise<PublicUserPredictions> {
   const data = await getJson(
     `/leaderboard/superliga/users/${encodeURIComponent(userId)}/predictions?page=${page}&size=20`, signal,
+    { credentials: "include", cache: "no-store" },
   );
   if (
     !isRecord(data) || typeof data.displayName !== "string" ||

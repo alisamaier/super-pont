@@ -14,6 +14,153 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 180px;
+}
+
+.account-menu {
+  position: relative;
+  min-width: 0;
+}
+
+.account-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #19222e;
+  cursor: pointer;
+  list-style: none;
+}
+
+.account-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 10;
+  width: 210px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #101620;
+  box-shadow: 0 12px 30px #0006;
+}
+
+.account-menu-panel :is(a, button) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  width: 100%;
+  text-align: left;
+}
+
+.account-menu-panel > * + * {
+  margin-top: 6px;
+}
+
+.auth-card.settings-card {
+  width: min(100%, 600px);
+}
+.main-container.account-settings-page {
+  max-width: 760px;
+  display: grid;
+  gap: 22px;
+  padding-block: 32px 56px;
+}
+.account-settings-page .settings-card {
+  width: 100%;
+}
+.settings-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--lime);
+}
+.settings-heading h1 {
+  font: 700 clamp(32px, 7vw, 44px) / 1.1 "Barlow Condensed", sans-serif;
+  color: #edf0f5;
+}
+.settings-card h2 {
+  font-size: 20px;
+}
+.password-input {
+  position: relative;
+}
+.auth-card .password-input input {
+  padding-right: 48px;
+}
+.password-input button {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 42px;
+  height: 40px;
+  color: var(--lime);
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  font-weight: 700;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.auth-card .settings-toggle input {
+  appearance: none;
+  width: 44px;
+  height: 26px;
+  min-height: 26px;
+  flex-shrink: 0;
+  padding: 3px;
+  border-radius: 20px;
+  background: #344152;
+  cursor: pointer;
+}
+
+.auth-card .settings-toggle input::before {
+  content: "";
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #edf0f5;
+}
+
+.auth-card .settings-toggle input:checked {
+  background: var(--lime);
+  border-color: var(--lime);
+}
+
+.auth-card .settings-toggle input:checked::before {
+  transform: translateX(18px);
+  background: #131d14;
+}
+
+.auth-card .settings-toggle input:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.settings-explanation {
+  color: #a5b2c4;
+  line-height: 1.8;
+}
+
+.settings-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  color: var(--lime);
 }
 
 .account-nav a,
@@ -107,7 +254,7 @@
   color: #ffc0c7;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 1000px) {
   .account-nav {
     grid-column: 2;
     grid-row: 1;

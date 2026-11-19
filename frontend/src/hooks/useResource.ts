@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { SessionExpiredError } from "../api/auth";
 
 export function useResource<T>(
   key: string | undefined,
@@ -29,6 +30,8 @@ export function useResource<T>(
         if (!controller.signal.aborted) setResult({ key, attempt, data });
       })
       .catch((error: unknown) => {
+        // The auth listener clears the session and the route guard takes over.
+        if (error instanceof SessionExpiredError) return;
         if (!controller.signal.aborted)
           setResult({
             key,

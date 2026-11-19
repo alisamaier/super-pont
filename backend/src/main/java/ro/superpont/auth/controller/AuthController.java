@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.security.Principal;
+import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -72,18 +73,18 @@ public class AuthController {
     @PostMapping("/auth/login")
     public UserView login(@Valid @RequestBody LoginRequest login, HttpServletRequest request,
             HttpServletResponse response) {
-        rateLimiter.checkLoginUsername(login.username());
+        rateLimiter.checkLoginEmail(login.email());
         Authentication user;
         try {
             if (!UserService.fitsBcrypt(login.password())) {
                 throw new BadCredentialsException("Invalid credentials");
             }
             user = authentication.authenticate(
-                    UsernamePasswordAuthenticationToken.unauthenticated(login.username(), login.password()));
+                    UsernamePasswordAuthenticationToken.unauthenticated(login.email(), login.password()));
         } catch (BadCredentialsException exception) {
-            throw new DomainException(HttpStatus.UNAUTHORIZED, "Invalid username or password");
+            throw new DomainException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
-        UserView profile = users.currentUser(user.getName());
+        UserView profile = users.currentUser(UUID.fromString(user.getName()));
         sessions.onAuthentication(user, request, response);
         var context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(user);
@@ -94,6 +95,6 @@ public class AuthController {
 
     @GetMapping("/users/me")
     public UserView currentUser(Principal principal) {
-        return users.currentUser(principal.getName());
+        return users.currentUser(UUID.fromString(principal.getName()));
     }
 }

@@ -35,10 +35,11 @@ public class PublicPredictionService {
         this.clock = clock;
     }
 
-    public PublicUserPredictions currentSuperLiga(UUID userId, int pageNumber, int size) {
+    public PublicUserPredictions currentSuperLiga(UUID userId, int pageNumber, int size, UUID viewerId) {
         page(pageNumber, size, "id");
         var now = clock.instant();
-        var displayName = users.findDisplayNameById(userId).orElseThrow(() -> DomainException.missing("User"));
+        var owner = users.findById(userId).orElseThrow(() -> DomainException.missing("User"));
+        boolean revealBeforeDeadline = !owner.isHidePredictionsUntilKickoff() || owner.getId().equals(viewerId);
         var season = seasons.findCurrentSuperLiga(now).orElseThrow(() -> DomainException.missing("Current SuperLiga season"));
         var competition = season.getCompetition();
         var sort = Sort.by("match.round.phase.position", "match.round.number").descending()
@@ -51,14 +52,15 @@ public class PublicPredictionService {
                     prediction.getFinalHome(), prediction.getFinalAway(),
                     prediction.getPredictedHome(), prediction.getPredictedAway())).sum();
         }
-        return new PublicUserPredictions(displayName, competition.getId(), competition.getName(),
-                season.getId(), season.getName(), total, now, PageView.of(selected.map(prediction -> view(prediction, now))));
+        return new PublicUserPredictions(owner.getDisplayName(), competition.getId(), competition.getName(),
+                season.getId(), season.getName(), total, now,
+                PageView.of(selected.map(prediction -> view(prediction, now, revealBeforeDeadline))));
     }
 
-    private static PublicPredictionView view(Prediction prediction, Instant now) {
+    private static PublicPredictionView view(Prediction prediction, Instant now, boolean revealBeforeDeadline) {
         var match = prediction.getMatch();
         var round = match.getRound();
-        boolean revealed = PredictionDeadline.hasPassed(match.getKickoff(), now);
+        boolean revealed = revealBeforeDeadline || PredictionDeadline.hasPassed(match.getKickoff(), now);
         var score = revealed
                 ? new PublicPredictionView.Score(prediction.getHomeScore(), prediction.getAwayScore()) : null;
         var result = revealed ? PredictionScoring.evaluate(match.getStatus(), match.getHomeScore(),

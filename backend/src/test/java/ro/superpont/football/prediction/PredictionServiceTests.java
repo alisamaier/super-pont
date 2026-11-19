@@ -37,7 +37,7 @@ class PredictionServiceTests {
     PredictionServiceTests() {
         when(user.getId()).thenReturn(userId);
         when(match.getId()).thenReturn(matchId);
-        when(users.findForUpdateByUsername("fan")).thenReturn(Optional.of(user));
+        when(users.findForUpdateById(userId)).thenReturn(Optional.of(user));
         when(matches.findById(matchId)).thenReturn(Optional.of(match));
     }
 
@@ -48,7 +48,7 @@ class PredictionServiceTests {
         var saved = new Prediction(user, match, 0, 99, createdAt);
         when(predictions.findByUserIdAndMatchId(userId, matchId)).thenReturn(Optional.of(saved));
 
-        var outcome = service.save("fan", matchId, new PredictionRequest(0, 99));
+        var outcome = service.save(userId, matchId, new PredictionRequest(0, 99));
 
         assertThat(outcome.created()).isFalse();
         assertThat(outcome.prediction().createdAt()).isEqualTo(createdAt);
@@ -62,7 +62,7 @@ class PredictionServiceTests {
         var saved = new Prediction(user, match, 1, 2, now.minusSeconds(1));
         when(predictions.findByUserIdAndMatchId(userId, matchId)).thenReturn(Optional.of(saved));
 
-        assertThatThrownBy(() -> service.delete("fan", matchId))
+        assertThatThrownBy(() -> service.delete(userId, matchId))
                 .isInstanceOfSatisfying(DomainException.class,
                         error -> assertThat(error.getStatus()).isEqualTo(HttpStatus.CONFLICT));
         verify(predictions, never()).delete(any());

@@ -1,4 +1,5 @@
 import { apiUrl } from "../config";
+import { sessionFetch, SessionExpiredError } from "./auth";
 import { isUuid } from "../lib/uuid";
 import { invalidResponse, isRecord, readPage, readPages } from "./page";
 import {
@@ -96,21 +97,23 @@ function isLeaderboardRow(value: unknown): value is LeaderboardRow {
   );
 }
 
-export async function getJson(path: string, signal: AbortSignal): Promise<unknown> {
+export async function getJson(path: string, signal: AbortSignal, options: Pick<RequestInit, "credentials" | "cache"> = {}): Promise<unknown> {
   let response: Response;
+  const authenticated = options.credentials === "include";
+  const init = { ...options, signal, headers: { Accept: "application/json" } };
   try {
-    response = await fetch(`${apiUrl}/api${path}`, {
-      signal,
-      headers: { Accept: "application/json" },
-    });
+    response = await (authenticated ? sessionFetch(path, init) : fetch(`${apiUrl}/api${path}`, init));
   } catch (error) {
-    if (signal.aborted) throw error;
+    if (signal.aborted || error instanceof SessionExpiredError) throw error;
+    if (authenticated) console.error("[Super Pont] Cererea API a eșuat.", { path, error });
     throw new Error("Nu ne-am putut conecta la API. Încearcă din nou.");
   }
-  if (!response.ok)
+  if (!response.ok) {
+    if (authenticated) console.error("[Super Pont] Cererea API a eșuat.", { path, status: response.status });
     throw new Error(
       `API-ul nu a putut încărca datele (HTTP ${response.status}).`,
     );
+  }
   try {
     return await response.json();
   } catch {
@@ -146,7 +149,8 @@ export const footballApi = {
   matches: (roundId: string, signal: AbortSignal) =>
     list("/matches", { roundId }, isMatch, signal),
   async leaderboard(page: number, signal: AbortSignal) {
-    const response = await getJson(`/leaderboard/superliga?page=${page}&size=20`, signal);
+    const response = await getJson(`/leaderboard/superliga?page=${page}&size=20`, signal,
+      { credentials: "include", cache: "no-store" });
     return readPage(response, page, isLeaderboardRow);
   },
 };

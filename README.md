@@ -30,6 +30,9 @@ The first run downloads build dependencies. The browser API URL uses localhost;
 the backend database connection uses the Compose hostname `db`.
 With Podman, start the machine if needed and use `podman compose up -d` in place
 of `docker compose up --build`.
+The frontend container polls mounted source files so edits on Windows/WSL update
+Vite reliably. After changing Compose configuration, use `podman compose up -d`
+to apply it; restarting an existing container alone does not update its environment.
 Stop with `docker compose down`. Adding `-v` deliberately deletes local database data.
 Changing a password in `.env` does not change an existing database role's password;
 update the role separately or recreate the disposable volume.
@@ -88,16 +91,17 @@ update `FRONTEND_URL` and restart the backend. No Vite proxy is needed.
 
 1. Start the stack and open Super Pont at `http://localhost:5173`. Use
    `localhost` for both the frontend and API.
-2. Click **Cont nou**. Register with a unique username and email and a password
+2. Click **Cont nou**. Register with a public **Nume**, a unique email and a password
    of at least eight characters and at most 72 UTF-8 bytes. Confirm the app
-   opens the sign-in page with the username filled in.
-3. Sign in with that username and password. The username appears in the header
+   opens the sign-in page with the email filled in.
+3. Sign in with that email and password. The public name appears in the header
    and persists when you reload. In the browser network panel, `GET /api/users/me`
    returns the profile and the API sets an HttpOnly `JSESSIONID` cookie.
 4. Click **Deconectare**. Reload and confirm the account links return. A request
    to `GET /api/users/me` now returns `401`, and the football schedule still loads.
-5. Try registering the same username or email with different capitalization,
-   or signing in with a wrong password. The form should display an error.
+5. Try registering the same email with different capitalization or surrounding
+   whitespace, or signing in with a wrong password. The form should display an
+   error. Names can be duplicated; email login ignores case and surrounding whitespace.
 
 See the [authentication API](backend/README.md#authentication) for CSRF headers,
 status codes, and local admin setup.
@@ -110,7 +114,7 @@ status codes, and local admin setup.
 2. Run `podman compose exec db psql -U superpont -d superpont` from the repository
    root. Use `docker compose` if applicable and substitute the local database user
    and name if you changed them.
-3. Run the query below with your username. Update the score and rerun the query to
+3. Run the query below with your normalized email. Update the score and rerun the query to
    check that the same row has the new scores and a later `updated_at`. Delete
    the prediction before kickoff and rerun the query to confirm the row is gone.
 
@@ -120,7 +124,7 @@ SELECT p.id, p.match_id, p.home_score, p.away_score, m.kickoff,
 FROM predictions AS p
 JOIN users AS u ON u.id = p.user_id
 JOIN football_matches AS m ON m.id = p.match_id
-WHERE u.username = 'your_username'
+WHERE u.email = 'you@example.test'
 ORDER BY p.updated_at DESC;
 ```
 
@@ -136,14 +140,19 @@ podman compose restart backend
 ```
 
 Use `docker compose up -d` if you use Docker. Open
-[Clasament](http://localhost:5173/clasament) and sign in as `demo_ana` with
+[Clasament](http://localhost:5173/clasament) and sign in as `demo_ana@leaderboard.example.test` with
 `SuperPontDemo2026!` to highlight Ana's row. The sample ranks are Ana 18 (1),
-Mara 13 and Radu 13 (2), and Vlad 0 (4). To see Ana's predictions in the ticket,
+Mara 13 and Radu 13 (2), Demo ascuns 10 (4), Demo public 4 (5), and Vlad 0 (6).
+To see Ana's predictions in the ticket,
 open matchday **Etapa 17** on the matches page.
+
+All registered accounts appear in the current-season leaderboard. Accounts with
+no evaluated predictions start at zero points and share a rank with other users
+on the same total. Points continue to come only from finished matches.
 
 Click **Ana** in the leaderboard to open her current-season predictions. You can
 also open [Ana's predictions](http://localhost:5173/clasament/utilizatori/20000000-0000-0000-0000-000000000001)
-directly. To compare accounts, sign in as `demo_radu` with the same demo password.
+directly. To compare accounts, sign in as `demo_radu@leaderboard.example.test` with the same demo password.
 Ana and Radu have hidden predictions for **Etapa 18**, a scheduled game on
 20 June 2027. Their live game in **Etapa 17** shows the predicted score and
 pending points. The two finished games show the same evaluated points as
@@ -171,6 +180,60 @@ The opt-in seed places its fixtures in the 2026/2027 demo season and adds a
 historical comparison. It preserves results and predictions already in the
 database when rerun. Remove the environment variable to disable further seed
 loading. Rows already inserted stay in the local database.
+
+## Visibility settings demo
+
+The public-name menu opens **Setările contului**, with independent
+**Profil**, **Schimbă parola**, and **Pronosticuri** sections. Display names may
+contain up to 64 characters, may be duplicated, and do not change the login email. Password changes
+require the current password and a new registration-valid password, then require
+login again on every session. New accounts have prediction hiding disabled;
+existing accounts retain their saved choice.
+
+The opt-in leaderboard seed also creates two visibility test accounts. In the
+local development Compose stack, load the data and new migration with:
+
+```powershell
+$env:LEADERBOARD_DEMO = 'true'
+podman compose up -d
+podman compose restart backend
+```
+
+Use `docker compose` instead if applicable. Keep this seed on the `dev` profile
+and a local development database. It is repeatable: existing accounts,
+predictions, and changed preferences are preserved.
+
+Both accounts use password `SuperPontDemo2026!`:
+
+| Account | Initial preference | Future prediction (Etapa 18) | Started prediction (Etapa 17) |
+| --- | --- | --- | --- |
+| `demo_ascuns@leaderboard.example.test` | Hiding enabled | 2–0, hidden from others | 1–2, visible |
+| `demo_public@leaderboard.example.test` | Hiding disabled | 3–1, visible immediately | 2–2, visible |
+
+The remaining demo login emails are `demo_ana@leaderboard.example.test`,
+`demo_radu@leaderboard.example.test`, `demo_mara@leaderboard.example.test`, and
+`demo_vlad@leaderboard.example.test`, all with the same password above.
+
+The future fixture is scheduled for 20 June 2027 at 18:00 UTC; the started
+fixture is a `LIVE` demo game from 4 November 2026. These examples belong to
+the 2026/2027 demo season, which must be the current season for public views.
+Both accounts also have a prediction for the finished 0–0 match in Etapa 17:
+Demo ascuns predicted 0–0 (10 points), and Demo public predicted 1–0 (4 points).
+They appear in the leaderboard, where their names link to their predictions.
+You can also use their direct pages:
+
+- [Demo ascuns](http://localhost:5173/clasament/utilizatori/20000000-0000-0000-0000-000000000006)
+- [Demo public](http://localhost:5173/clasament/utilizatori/20000000-0000-0000-0000-000000000007)
+
+Sign in as `demo_ana@leaderboard.example.test` to compare both pages from another account. Leaderboard
+and user-prediction pages require a session: signed-out direct visits go to login
+and return to the requested page after authentication. "Meciuri" and "Regulament"
+remain available to visitors. Sign in as either owner to see their own future score. Open the
+name menu → **Setările contului** and toggle **Ascunde pronosticurile mele
+până la start**. Reopen the owner's page from the other account (a separate
+browser profile works), and confirm existing predictions follow the change.
+Refresh settings and sign out/in to verify persistence. Started scores remain
+visible with either setting; editing still locks at scheduled kickoff.
 
 ## Build and verification
 

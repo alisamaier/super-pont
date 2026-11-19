@@ -29,7 +29,7 @@ class AuthRateLimitApiTests {
                         forwarded(i));
                 assertThat(result.statusCode()).isEqualTo(401);
                 assertThat(json.readTree(result.body()).path("detail").asText())
-                        .isEqualTo("Invalid username or password");
+                        .isEqualTo("Invalid email or password");
             }
             var rejected = session.request("POST", "/auth/login", login("another"), csrf, forwarded(6));
             assertRateLimited(rejected, 60);
@@ -57,8 +57,8 @@ class AuthRateLimitApiTests {
         return Map.of("Origin", "http://localhost:5173", "X-Forwarded-For", address, "Forwarded", "for=" + address);
     }
 
-    static Map<String, String> login(String username) {
-        return Map.of("username", username, "password", "invalid password");
+    static Map<String, String> login(String email) {
+        return Map.of("email", email.contains("@") ? email : email + "@example.test", "password", "invalid password");
     }
 
     static void assertRateLimited(HttpResponse<String> response, int maxRetryAfter) {

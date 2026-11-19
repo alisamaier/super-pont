@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type MouseEvent } from "react";
 import {
   ArrowRight,
+  BookOpen,
   CalendarDays,
   Check,
   CheckCheck,
@@ -20,34 +21,59 @@ import { useFootballSchedule } from "./hooks/useFootballSchedule";
 import { predictionError, usePredictions } from "./hooks/usePredictions";
 import { fixtureDays, matchdayLabel } from "./lib/fixtures";
 import { pendingDrafts, type SaveResult } from "./lib/predictions";
+import { loginReturnPath, userPredictionsRoute } from "./lib/navigation";
 import { MatchCard } from "./components/MatchCard";
 import { LeaderboardPage } from "./components/LeaderboardPage";
+import { RulesPage } from "./components/RulesPage";
 import { UserPredictionsPage } from "./components/UserPredictionsPage";
 import { PredictionSummary } from "./components/PredictionSummary";
 import { SaveReport } from "./components/SaveReport";
 import { CompetitionTabs } from "./components/CompetitionTabs";
 import type { ScoreDraft } from "./types";
-import { authErrorMessage, getCurrentUser, logout, type AuthUser } from "./api/auth";
+import { authErrorMessage, getCurrentUser, logout, onSessionExpired, type AuthUser } from "./api/auth";
 import { AuthPage } from "./components/AuthPage";
+import { AccountMenu } from "./components/AccountMenu";
+import { AccountSettingsPage } from "./components/AccountSettingsPage";
 import "./App.css";
 import "./components/Auth.css";
 
 function App() {
-  const [path, setPath] = useState(() => window.location.pathname + window.location.search);
+  const [path, setPath] = useState(() => window.location.pathname + window.location.search + window.location.hash);
   const location = new URL(path, window.location.origin);
-  const authPage = path === "/login" || path === "/register" ? path : null;
-  const selectedUserId = /^\/clasament\/utilizatori\/([^/]+)$/.exec(location.pathname)?.[1];
+  const authPage = location.pathname === "/login" || location.pathname === "/register" ? location.pathname : null;
+  const selectedUserId = userPredictionsRoute.exec(location.pathname)?.[1];
   const leaderboardPage = location.pathname === "/clasament" || !!selectedUserId;
+  const rulesPage = location.pathname === "/regulament";
+  const settingsPage = location.pathname === "/setari-cont";
+  const protectedPage = settingsPage || leaderboardPage;
+  const returnPath = loginReturnPath(location.searchParams.get("next"), window.location.origin);
+  const authQuery = returnPath === "/" ? "" : `?next=${encodeURIComponent(returnPath)}`;
+  const schedulePage = !authPage && !leaderboardPage && !rulesPage && !settingsPage;
   const requestedPage = Number(location.searchParams.get("page") ?? "0");
   const leaderboardPageNumber = Number.isSafeInteger(requestedPage) && requestedPage >= 0 ? requestedPage : 0;
   const [user, setUser] = useState<AuthUser | null>();
-  const [registeredUsername, setRegisteredUsername] = useState("");
+  const [registeredEmail, setRegisteredEmail] = useState("");
+  const [loginNotice, setLoginNotice] = useState("");
   const [signingOut, setSigningOut] = useState(false);
 
+  useEffect(() => onSessionExpired(() => setUser(null)), []);
+
   useEffect(() => {
-    const syncPath = () => setPath(window.location.pathname + window.location.search);
+    if (protectedPage && user === null) {
+      const destination = `/login?next=${encodeURIComponent(path)}`;
+      window.history.replaceState(null, "", destination);
+      setPath(destination);
+    }
+  }, [protectedPage, path, user]);
+
+  useEffect(() => {
+    const syncPath = () => setPath(window.location.pathname + window.location.search + window.location.hash);
     window.addEventListener("popstate", syncPath);
-    return () => window.removeEventListener("popstate", syncPath);
+    window.addEventListener("hashchange", syncPath);
+    return () => {
+      window.removeEventListener("popstate", syncPath);
+      window.removeEventListener("hashchange", syncPath);
+    };
   }, []);
 
   useEffect(() => {
@@ -60,9 +86,10 @@ function App() {
     return () => controller.abort();
   }, []);
 
-  function navigate(destination: string) {
-    if (window.location.pathname + window.location.search !== destination) {
-      window.history.pushState(null, "", destination);
+  function navigate(destination: string, replace = false) {
+    if (window.location.pathname + window.location.search + window.location.hash !== destination) {
+      if (replace) window.history.replaceState(null, "", destination);
+      else window.history.pushState(null, "", destination);
     }
     setPath(destination);
   }
@@ -78,6 +105,8 @@ function App() {
     try {
       await logout();
       resetPredictionEdits();
+      setView("all");
+      setDay("all");
       setUser(null);
       navigate("/");
     } catch (cause) {
@@ -227,8 +256,8 @@ function App() {
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href={authPage ? "#auth-content" : selectedUserId ? "#user-predictions" : leaderboardPage ? "#clasament" : "#matches"}>
-        {authPage ? "Sari la cont" : leaderboardPage ? "Sari la clasament" : "Sari la meciuri"}
+      <a className="skip-link" href={authPage ? "#auth-content" : settingsPage ? "#account-settings" : rulesPage ? "#regulament" : selectedUserId ? "#user-predictions" : leaderboardPage ? "#clasament" : "#matches"}>
+        {authPage ? "Sari la cont" : settingsPage ? "Sari la setări" : rulesPage ? "Sari la regulament" : leaderboardPage ? "Sari la clasament" : "Sari la meciuri"}
       </a>
       <header className="site-header">
         <div className="header-inner">
@@ -252,8 +281,8 @@ function App() {
           </a>
           <nav className="main-nav" aria-label="Navigare principală">
             <button
-              className={view === "all" && !leaderboardPage ? "nav-item active" : "nav-item"}
-              aria-pressed={view === "all" && !leaderboardPage}
+              className={view === "all" && schedulePage ? "nav-item active" : "nav-item"}
+              aria-pressed={view === "all" && schedulePage}
               onClick={() => {
                 navigate("/");
                 setView("all");
@@ -263,9 +292,9 @@ function App() {
               <LayoutGrid size={16} />
               Meciuri
             </button>
-            <button
-              className={view === "saved" && !leaderboardPage ? "nav-item active" : "nav-item"}
-              aria-pressed={view === "saved" && !leaderboardPage}
+            {user && <button
+              className={view === "saved" && schedulePage ? "nav-item active" : "nav-item"}
+              aria-pressed={view === "saved" && schedulePage}
               onClick={() => {
                 navigate("/");
                 setView("saved");
@@ -274,8 +303,8 @@ function App() {
             >
               <ClipboardList size={16} />
               Pronosticurile mele<span className="nav-count">{count}</span>
-            </button>
-            <a
+            </button>}
+            {user && <a
               className={leaderboardPage ? "nav-item active" : "nav-item"}
               href="/clasament"
               aria-current={leaderboardPage ? "page" : undefined}
@@ -283,20 +312,27 @@ function App() {
             >
               <Trophy size={16} aria-hidden="true" />
               Clasament
+            </a>}
+            <a
+              className={rulesPage ? "nav-item active" : "nav-item"}
+              href="/regulament"
+              aria-current={rulesPage ? "page" : undefined}
+              onClick={(event) => followLink(event, "/regulament")}
+            >
+              <BookOpen size={16} aria-hidden="true" />
+              Regulament
             </a>
           </nav>
           <nav className="account-nav" aria-label="Cont" aria-busy={user === undefined}>
             {user ? (
               <>
-                <span className="account-name" title={user.username}>{user.username}</span>
-                <button type="button" disabled={signingOut || predictions.busy} onClick={signOut}>
-                  Deconectare
-                </button>
+                <AccountMenu displayName={user.displayName} onNavigate={followLink}
+                  disabled={signingOut || predictions.busy} onSignOut={signOut} />
               </>
             ) : user === null && (
               <>
-                <a href="/login" onClick={(event) => followLink(event, "/login")}>Intră în cont</a>
-                <a href="/register" onClick={(event) => followLink(event, "/register")}>Cont nou</a>
+                <a href={`/login${authQuery}`} onClick={(event) => followLink(event, `/login${authQuery}`)}>Intră în cont</a>
+                <a href={`/register${authQuery}`} onClick={(event) => followLink(event, `/register${authQuery}`)}>Cont nou</a>
               </>
             )}
           </nav>
@@ -308,27 +344,48 @@ function App() {
           key={authPage}
           path={authPage}
           user={user}
-          registeredUsername={registeredUsername}
+          registeredEmail={registeredEmail}
+          notice={loginNotice}
+          returnTo={returnPath === "/" ? undefined : returnPath}
           onNavigate={followLink}
-          onRegistered={(username) => {
-            setRegisteredUsername(username);
-            navigate("/login");
+          onRegistered={(email) => {
+            setLoginNotice("");
+            setRegisteredEmail(email);
+            navigate(`/login${authQuery}`);
           }}
           onLogin={(account) => {
+            setLoginNotice("");
             resetPredictionEdits();
             setUser(account);
-            setRegisteredUsername("");
-            navigate("/");
+            setRegisteredEmail("");
+            navigate(returnPath, true);
           }}
         />
       )}
-      {leaderboardPage && (selectedUserId ? (
-        <UserPredictionsPage key={selectedUserId} userId={selectedUserId}
+      {leaderboardPage && user && (selectedUserId ? (
+        <UserPredictionsPage key={`${selectedUserId}/${user?.id ?? "visitor"}`} userId={selectedUserId}
           leaderboardPage={leaderboardPageNumber} onNavigate={followLink} />
       ) : (
         <LeaderboardPage currentUserId={user?.id} page={leaderboardPageNumber} onNavigate={followLink} />
       ))}
-      <main className="main-container matchday-page" hidden={authPage !== null || leaderboardPage}>
+      {rulesPage && <RulesPage hash={location.hash} />}
+      {settingsPage && user && <AccountSettingsPage key={user.id} user={user}
+        onProfileSaved={updated => setUser(current => current?.id === updated.id ? updated : current)}
+        onPasswordChanged={() => {
+          resetPredictionEdits();
+          setRegisteredEmail(user.email);
+          setLoginNotice("Parola a fost schimbată. Autentifică-te din nou.");
+          setUser(null);
+          setView("all");
+          setDay("all");
+          navigate("/login", true);
+        }} />}
+      {protectedPage && !user && (
+        <main className="main-container auth-main" id={settingsPage ? "account-settings" : selectedUserId ? "user-predictions" : "clasament"}>
+          <p role="status">Se verifică sesiunea…</p>
+        </main>
+      )}
+      <main className="main-container matchday-page" hidden={!schedulePage}>
         {showCompetitionTabs && (
           <CompetitionTabs
             competitions={competitions}
@@ -427,6 +484,13 @@ function App() {
                 </span>
               )}
             </div>
+            {view === "saved" && (
+              <p className="scoring-help">
+                <a href="/regulament#punctaj" onClick={(event) => followLink(event, "/regulament#punctaj")}>
+                  Cum se calculează punctele?
+                </a>
+              </p>
+            )}
             {days.length > 1 && (
               <div className="day-filters" aria-label="Filtrează după zi">
                 <button

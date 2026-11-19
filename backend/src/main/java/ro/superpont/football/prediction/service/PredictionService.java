@@ -36,16 +36,16 @@ public class PredictionService {
         this.clock = clock;
     }
 
-    public PageView<PredictionView> currentPredictions(String username, int pageNumber, int size) {
+    public PageView<PredictionView> currentPredictions(UUID userId, int pageNumber, int size) {
         var paging = page(pageNumber, size, "id");
-        var user = users.findByUsername(username).orElseThrow(PredictionService::missingAccount);
+        var user = users.findById(userId).orElseThrow(PredictionService::missingAccount);
         return PageView.of(predictions.findByUserId(user.getId(), paging).map(PredictionService::view));
     }
 
     @Transactional
-    public SaveOutcome save(String username, UUID matchId, PredictionRequest request) {
+    public SaveOutcome save(UUID userId, UUID matchId, PredictionRequest request) {
         // Lock a row that exists even for the first save, so concurrent PUT and DELETE see one order.
-        var user = users.findForUpdateByUsername(username).orElseThrow(PredictionService::missingAccount);
+        var user = users.findForUpdateById(userId).orElseThrow(PredictionService::missingAccount);
         var match = require(matches, matchId, "Match");
         var existing = predictions.findByUserIdAndMatchId(user.getId(), matchId);
         var now = requireBeforeKickoff(match).truncatedTo(ChronoUnit.MICROS);
@@ -60,8 +60,8 @@ public class PredictionService {
     }
 
     @Transactional
-    public void delete(String username, UUID matchId) {
-        var user = users.findForUpdateByUsername(username).orElseThrow(PredictionService::missingAccount);
+    public void delete(UUID userId, UUID matchId) {
+        var user = users.findForUpdateById(userId).orElseThrow(PredictionService::missingAccount);
         var match = require(matches, matchId, "Match");
         var existing = predictions.findByUserIdAndMatchId(user.getId(), matchId);
         requireBeforeKickoff(match);

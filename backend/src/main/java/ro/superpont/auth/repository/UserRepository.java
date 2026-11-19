@@ -11,19 +11,21 @@ import org.springframework.data.repository.query.Param;
 import ro.superpont.auth.model.User;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
-    Optional<User> findByUsername(String username);
+    Optional<User> findByEmail(String email);
+
+    boolean existsByEmail(String email);
+
+    @Query("select u.id as userId, u.displayName as displayName from User u")
+    List<LeaderboardAccount> findLeaderboardAccounts();
+
+    interface LeaderboardAccount {
+        UUID getUserId();
+        String getDisplayName();
+    }
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
-    Optional<User> findForUpdateByUsername(String username);
+    Optional<User> findForUpdateById(UUID id);
 
-    @Query("select coalesce(u.displayName, u.username) from User u where u.id = :id")
-    Optional<String> findDisplayNameById(@Param("id") UUID id);
-
-    List<RegistrationMatch> findByUsernameOrEmail(String username, String email);
-
-    interface RegistrationMatch {
-        String getUsername();
-
-        String getEmail();
-    }
+    @Query("select u.passwordVersion from User u where u.id = :id")
+    Optional<Long> findPasswordVersionById(@Param("id") UUID id);
 }

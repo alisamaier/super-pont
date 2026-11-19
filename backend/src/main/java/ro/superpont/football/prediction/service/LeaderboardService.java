@@ -11,22 +11,26 @@ import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
+import ro.superpont.auth.repository.UserRepository;
 import ro.superpont.common.PageView;
 import ro.superpont.football.prediction.dto.LeaderboardRow;
 import ro.superpont.football.prediction.repository.PredictionRepository;
 import ro.superpont.football.season.repository.SeasonRepository;
 
 @Service
-@Transactional(readOnly = true)
+@Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
 public class LeaderboardService {
     private final SeasonRepository seasons;
     private final PredictionRepository predictions;
+    private final UserRepository users;
     private final Clock clock;
 
-    public LeaderboardService(SeasonRepository seasons, PredictionRepository predictions, Clock clock) {
+    public LeaderboardService(SeasonRepository seasons, PredictionRepository predictions, UserRepository users, Clock clock) {
         this.seasons = seasons;
         this.predictions = predictions;
+        this.users = users;
         this.clock = clock;
     }
 
@@ -36,6 +40,8 @@ public class LeaderboardService {
         if (season.isEmpty()) return PageView.of(Page.empty(paging));
 
         Map<UUID, UserTotal> totals = new HashMap<>();
+        users.findLeaderboardAccounts().forEach(user ->
+                totals.put(user.getUserId(), new UserTotal(user.getDisplayName(), 0)));
         try (var evaluated = predictions.streamEvaluatedBySeasonId(
                 season.get().getId(), season.get().getCompetition().getId(), null)) {
             evaluated.forEach(prediction -> {

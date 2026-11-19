@@ -1,20 +1,21 @@
 import { apiUrl } from "../config";
+import { normalizeEmail } from "../lib/accountValidation";
 
 export interface AuthUser {
   id: string;
-  username: string;
+  displayName: string;
   email: string;
   role: "USER" | "ADMIN";
   createdAt: string;
 }
 
 interface LoginInput {
-  username: string;
+  email: string;
   password: string;
 }
 
 interface RegistrationInput extends LoginInput {
-  email: string;
+  displayName: string;
 }
 
 interface CsrfToken {
@@ -22,7 +23,22 @@ interface CsrfToken {
   token: string;
 }
 
-type RegistrationErrors = Partial<Record<"username" | "email", string>>;
+type RegistrationErrors = Partial<Record<"email", string>>;
+
+const sessionExpiredEvent = "super-pont:session-expired";
+let sessionVersion = 0;
+
+export class SessionExpiredError extends Error {
+  constructor() {
+    super("Sesiunea a expirat. Intră din nou în cont.");
+    this.name = "SessionExpiredError";
+  }
+}
+
+export function onSessionExpired(listener: () => void) {
+  window.addEventListener(sessionExpiredEvent, listener);
+  return () => window.removeEventListener(sessionExpiredEvent, listener);
+}
 
 class AuthError extends Error {
   constructor(
@@ -34,11 +50,22 @@ class AuthError extends Error {
   }
 }
 
-export function sessionFetch(path: string, init: RequestInit = {}) {
-  return fetch(`${apiUrl}/api${path}`, {
+export async function sessionFetch(path: string, init: RequestInit = {}) {
+  const version = sessionVersion;
+  const response = await fetch(`${apiUrl}/api${path}`, {
     ...init,
     credentials: "include",
   });
+  // Login failures and the initial anonymous session check have their own auth flow.
+  if (response.status === 401 && !path.startsWith("/auth/") && path.split("?")[0] !== "/users/me") {
+    if (!init.signal?.aborted && version === sessionVersion) {
+      sessionVersion++;
+      console.info("[Super Pont] Sesiunea nu mai este validă.", { path, status: response.status });
+      window.dispatchEvent(new Event(sessionExpiredEvent));
+    }
+    throw new SessionExpiredError();
+  }
+  return response;
 }
 
 async function request(path: string, init: RequestInit = {}) {
@@ -48,9 +75,6 @@ async function request(path: string, init: RequestInit = {}) {
       ? await response.json().catch(() => null)
       : null;
     const fieldErrors: RegistrationErrors = {};
-    if (typeof problem?.errors?.username === "string") {
-      fieldErrors.username = "Acest nume de utilizator este deja folosit.";
-    }
     if (typeof problem?.errors?.email === "string") {
       fieldErrors.email = "Această adresă de e-mail este deja înregistrată.";
     }
@@ -85,15 +109,18 @@ export async function getCurrentUser(signal: AbortSignal): Promise<AuthUser | nu
 }
 
 export async function register(input: RegistrationInput): Promise<AuthUser> {
-  return (await submit("/auth/register", input)).json();
+  return (await submit("/auth/register", { ...input, displayName: input.displayName.trim(), email: normalizeEmail(input.email) })).json();
 }
 
 export async function login(input: LoginInput): Promise<AuthUser> {
-  return (await submit("/auth/login", input)).json();
+  const response = await submit("/auth/login", { ...input, email: normalizeEmail(input.email) });
+  sessionVersion++;
+  return response.json();
 }
 
 export async function logout(): Promise<void> {
   await submit("/auth/logout");
+  sessionVersion++;
 }
 
 export function registrationFieldErrors(error: unknown): RegistrationErrors {
@@ -119,7 +146,7 @@ export function authErrorMessage(error: unknown) {
       case 400:
         return "Verifică datele introduse și încearcă din nou.";
       case 401:
-        return "Numele de utilizator sau parola este incorectă.";
+        return "Adresa de email sau parola este incorectă.";
       case 403:
         return "Cererea a fost respinsă. Încearcă din nou.";
       case 409:

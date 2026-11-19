@@ -24,7 +24,7 @@ public interface PredictionRepository extends JpaRepository<Prediction, UUID> {
             UUID userId, UUID seasonId, UUID competitionId, Pageable pageable);
 
     @Query("""
-            select u.id as userId, coalesce(u.displayName, u.username) as displayName,
+            select u.id as userId, u.displayName as displayName,
                    p.homeScore as predictedHome, p.awayScore as predictedAway,
                    m.homeScore as finalHome, m.awayScore as finalAway
             from Prediction p join p.match m join p.user u

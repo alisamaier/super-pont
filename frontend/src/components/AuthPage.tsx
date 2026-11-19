@@ -5,6 +5,7 @@ import {
   type MouseEvent,
 } from "react";
 import { CircleUserRound } from "lucide-react";
+import { displayNameError, passwordError, normalizeEmail } from "../lib/accountValidation";
 import {
   authErrorMessage,
   login,
@@ -18,22 +19,14 @@ export type AuthPagePath = "/login" | "/register";
 function fieldError(input: HTMLInputElement, registering: boolean): string {
   const { name, value } = input;
   switch (name) {
-    case "username":
-      if (!value.trim()) return "Introdu numele de utilizator.";
-      if (registering && !/^[A-Za-z0-9_]{3,32}$/.test(value)) {
-        return "Folosește între 3 și 32 de litere latine, cifre sau caractere _.";
-      }
-      return value.length > 32 ? "Numele de utilizator poate avea cel mult 32 de caractere." : "";
+    case "displayName":
+      return displayNameError(value);
     case "email":
-      if (!value.trim()) return "Introdu adresa de e-mail.";
-      if (value.length > 254) return "Adresa de e-mail poate avea cel mult 254 de caractere.";
-      return input.validity.typeMismatch ? "Introdu o adresă de e-mail validă." : "";
+      if (!value.trim()) return "Introdu adresa de email.";
+      if (value.trim().length > 254) return "Adresa de email poate avea cel mult 254 de caractere.";
+      return input.validity.typeMismatch ? "Introdu o adresă de email validă." : "";
     case "password":
-      if (!value.trim()) return "Introdu parola.";
-      if (registering && value.length < 8) return "Parola trebuie să aibă cel puțin 8 caractere.";
-      return new TextEncoder().encode(value).length > 72
-        ? "Parola poate avea cel mult 72 de octeți."
-        : "";
+      return passwordError(value, registering);
     default:
       return "";
   }
@@ -76,21 +69,26 @@ function AuthField({
 export function AuthPage({
   path,
   user,
-  registeredUsername,
+  registeredEmail,
+  returnTo,
+  notice,
   onNavigate,
   onRegistered,
   onLogin,
 }: {
   path: AuthPagePath;
   user: AuthUser | null | undefined;
-  registeredUsername: string;
+  registeredEmail: string;
+  returnTo?: string;
+  notice?: string;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, path: string) => void;
-  onRegistered: (username: string) => void;
+  onRegistered: (email: string) => void;
   onLogin: (user: AuthUser) => void;
 }) {
   const registering = path === "/register";
   const title = registering ? "Creează cont" : "Autentificare";
-  const alternate = registering ? "/login" : "/register";
+  const alternate = (registering ? "/login" : "/register")
+    + (returnTo ? `?next=${encodeURIComponent(returnTo)}` : "");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -114,22 +112,22 @@ export function AuthPage({
     if (Object.values(errors).some(Boolean)) return;
 
     const data = new FormData(form);
-    const username = String(data.get("username"));
+    const email = normalizeEmail(String(data.get("email")));
     const password = String(data.get("password"));
     setPending(true);
     try {
       if (registering) {
-        const account = await register({ username, password, email: String(data.get("email")) });
-        onRegistered(account.username);
+        const account = await register({ displayName: String(data.get("displayName")), password, email });
+        onRegistered(account.email);
       } else {
-        onLogin(await login({ username, password }));
+        onLogin(await login({ email, password }));
       }
     } catch (cause) {
       const conflicts = Object.entries(registrationFieldErrors(cause));
       if (conflicts.length) {
         const current = new FormData(form);
         const unchanged = conflicts.filter(([field]) =>
-          String(current.get(field)).toLowerCase() === String(data.get(field)).toLowerCase(),
+          normalizeEmail(String(current.get(field))) === normalizeEmail(String(data.get(field))),
         );
         setFieldErrors((previous) => ({ ...previous, ...Object.fromEntries(unchanged) }));
       } else {
@@ -146,31 +144,25 @@ export function AuthPage({
         <CircleUserRound className="auth-icon" size={30} aria-hidden="true" />
         <h1 id="auth-title">{title}</h1>
         {user ? (
-          <p>Ești conectat ca <strong>{user.username}</strong>.</p>
+          <p>Ești conectat ca <strong>{user.displayName}</strong>.</p>
         ) : (
           <>
-            {!registering && registeredUsername && (
+            {!registering && notice && <p role="status">{notice}</p>}
+            {!registering && registeredEmail && !notice && (
               <p role="status">Contul a fost creat. Autentifică-te pentru a continua.</p>
             )}
             <form noValidate onSubmit={submit}>
-              <AuthField
-                name="username"
-                label="Nume de utilizator"
-                autoComplete="username"
-                defaultValue={registering ? "" : registeredUsername}
-                error={fieldErrors.username}
-                onChange={validateChange}
-              />
               {registering && (
                 <AuthField
-                  name="email"
-                  label="E-mail"
-                  type="email"
-                  autoComplete="email"
-                  error={fieldErrors.email}
+                  name="displayName"
+                  label="Nume"
+                  autoComplete="nickname"
+                  error={fieldErrors.displayName}
                   onChange={validateChange}
                 />
               )}
+              <AuthField name="email" label="Adresă de email" type="email" autoComplete="email"
+                defaultValue={registering ? "" : registeredEmail} error={fieldErrors.email} onChange={validateChange} />
               <AuthField
                 name="password"
                 label="Parolă"

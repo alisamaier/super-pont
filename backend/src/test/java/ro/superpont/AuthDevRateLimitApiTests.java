@@ -34,7 +34,7 @@ class AuthDevRateLimitApiTests {
     }
 
     @Test
-    void admitsTenLoginAttemptsPerIpAndRetainsTheUsernameLimit() throws Exception {
+    void admitsTenLoginAttemptsPerIpAndRetainsTheEmailLimit() throws Exception {
         try (var session = new TestHttpSession(port, json)) {
             String csrf = session.csrf();
             for (int i = 0; i < 5; i++) {

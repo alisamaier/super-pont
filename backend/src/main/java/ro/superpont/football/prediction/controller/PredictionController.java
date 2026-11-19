@@ -26,13 +26,13 @@ public class PredictionController {
     @GetMapping("/predictions/me")
     public PageView<PredictionView> currentPredictions(Principal principal,
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return predictions.currentPredictions(principal.getName(), page, size);
+        return predictions.currentPredictions(UUID.fromString(principal.getName()), page, size);
     }
 
     @PutMapping("/matches/{matchId}/prediction")
     public ResponseEntity<PredictionView> save(Principal principal, @PathVariable UUID matchId,
             @Valid @RequestBody PredictionRequest request) {
-        var result = predictions.save(principal.getName(), matchId, request);
+        var result = predictions.save(UUID.fromString(principal.getName()), matchId, request);
         if (result.created()) {
             return ResponseEntity.created(URI.create("/api/matches/" + matchId + "/prediction"))
                     .body(result.prediction());
@@ -43,7 +43,7 @@ public class PredictionController {
     @DeleteMapping("/matches/{matchId}/prediction")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(Principal principal, @PathVariable UUID matchId) {
-        predictions.delete(principal.getName(), matchId);
+        predictions.delete(UUID.fromString(principal.getName()), matchId);
     }
 
     @ExceptionHandler(PessimisticLockingFailureException.class)

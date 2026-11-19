@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import App from "./App";
 import { footballResponse, matches, page } from "./api/football.test-data";
 
-const account = { id: "user-id", username: "supporter", email: "fan@example.test", role: "USER" };
+const account = { id: "user-id", displayName: "Suporter", email: "fan@example.test", role: "USER" };
 const fetcher = vi.fn<typeof fetch>();
 let signedIn: boolean;
 let registrationConflict: object | undefined;
@@ -60,28 +60,47 @@ afterEach(() => {
 
 it("registers, signs in, restores the session on reload and signs out", async () => {
   const app = render(<App />);
+  let navigation = screen.getByRole("navigation", { name: "Navigare principală" });
+  expect(within(navigation).queryByRole("button", { name: /Pronosticurile mele/ })).toBeNull();
+  expect(within(navigation).queryByRole("link", { name: "Clasament" })).toBeNull();
+  expect(navigation.querySelector(".nav-count")).toBeNull();
   fireEvent.click(await screen.findByRole("link", { name: "Cont nou" }));
   expect(window.location.pathname).toBe("/register");
-  fireEvent.change(screen.getByLabelText("Nume de utilizator"), { target: { value: "Supporter" } });
-  fireEvent.change(screen.getByLabelText("E-mail"), { target: { value: account.email } });
+  fireEvent.change(screen.getByLabelText("Nume"), { target: { value: "Suporter" } });
+  fireEvent.change(screen.getByLabelText("Adresă de email"), { target: { value: account.email } });
   fireEvent.change(screen.getByLabelText("Parolă"), { target: { value: "good password" } });
   fireEvent.click(screen.getByRole("button", { name: "Creează cont" }));
   expect(await screen.findByText(/Contul a fost creat/)).toBeTruthy();
   expect(window.location.pathname).toBe("/login");
-  expect((screen.getByLabelText("Nume de utilizator") as HTMLInputElement).value).toBe(account.username);
+  expect((screen.getByLabelText("Adresă de email") as HTMLInputElement).value).toBe(account.email);
 
   fireEvent.change(screen.getByLabelText("Parolă"), { target: { value: "good password" } });
   fireEvent.click(screen.getByRole("button", { name: "Intră în cont" }));
   const header = within(screen.getByRole("navigation", { name: "Cont" }));
-  expect(await header.findByText(account.username)).toBeTruthy();
+  expect(await header.findByText(account.displayName)).toBeTruthy();
   expect(window.location.pathname).toBe("/");
   await screen.findByRole("button", { name: "Pronostic salvat" });
+  expect(within(navigation).getByRole("link", { name: "Clasament" })).toBeTruthy();
+  expect(within(navigation).getByRole("button", { name: /Pronosticurile mele/ }).querySelector(".nav-count")?.textContent).toBe("1");
   app.unmount();
   render(<App />);
+  navigation = screen.getByRole("navigation", { name: "Navigare principală" });
+  expect(within(navigation).queryByRole("button", { name: /Pronosticurile mele/ })).toBeNull();
+  expect(within(navigation).queryByRole("link", { name: "Clasament" })).toBeNull();
+  expect(navigation.querySelector(".nav-count")).toBeNull();
   const restored = within(screen.getByRole("navigation", { name: "Cont" }));
-  expect(await restored.findByText(account.username)).toBeTruthy();
+  expect(await restored.findByText(account.displayName)).toBeTruthy();
+  await waitFor(() => expect(within(navigation).getByRole("button", { name: /Pronosticurile mele/ }).querySelector(".nav-count")?.textContent).toBe("1"));
+  fireEvent.click(within(navigation).getByRole("button", { name: /Pronosticurile mele/ }));
+  fireEvent.click(restored.getByText(account.displayName).closest("summary")!);
   fireEvent.click(restored.getByRole("button", { name: "Deconectare" }));
   expect(await restored.findByRole("link", { name: "Intră în cont" })).toBeTruthy();
+  expect(within(navigation).queryByRole("button", { name: /Pronosticurile mele/ })).toBeNull();
+  expect(within(navigation).queryByRole("link", { name: "Clasament" })).toBeNull();
+  expect(navigation.querySelector(".nav-count")).toBeNull();
+  expect(restored.getByRole("link", { name: "Cont nou" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Meciurile etapei" })).toBeTruthy();
+  expect(window.location.pathname).toBe("/");
 
   const authCalls = fetcher.mock.calls.filter(([input]) => /\/api\/(auth\/|users\/me)/.test(String(input)));
   expect(authCalls.every(([, init]) => init?.credentials === "include")).toBe(true);
@@ -98,7 +117,7 @@ it("shows an invalid credentials error on the direct login page", async () => {
   window.history.replaceState(null, "", "/login");
   render(<App />);
   await screen.findByRole("link", { name: "Cont nou" });
-  fireEvent.change(screen.getByLabelText("Nume de utilizator"), { target: { value: account.username } });
+  fireEvent.change(screen.getByLabelText("Adresă de email"), { target: { value: account.email } });
   fireEvent.change(screen.getByLabelText("Parolă"), { target: { value: "wrong password" } });
   fireEvent.click(screen.getByRole("button", { name: "Intră în cont" }));
   expect(await screen.findByText(/parola este incorectă/)).toBeTruthy();
@@ -109,59 +128,34 @@ async function fillRegistration() {
   window.history.replaceState(null, "", "/register");
   render(<App />);
   await screen.findByRole("link", { name: "Cont nou" });
-  const username = screen.getByLabelText("Nume de utilizator");
-  const email = screen.getByLabelText("E-mail");
-  fireEvent.change(username, { target: { value: "Supporter" } });
+  const name = screen.getByLabelText("Nume");
+  const email = screen.getByLabelText("Adresă de email");
+  fireEvent.change(name, { target: { value: "Suporter" } });
   fireEvent.change(email, { target: { value: account.email } });
   fireEvent.change(screen.getByLabelText("Parolă"), { target: { value: "good password" } });
-  return { username, email, submit: screen.getByRole("button", { name: "Creează cont" }) };
+  return { name, email, submit: screen.getByRole("button", { name: "Creează cont" }) };
 }
-
-it("shows a taken username below the username field and clears it on edit", async () => {
-  registrationConflict = { errors: { username: "Username is already taken" } };
-  const { username, email, submit } = await fillRegistration();
-  fireEvent.click(submit);
-  const message = "Acest nume de utilizator este deja folosit.";
-  await screen.findByText(message);
-  expectFieldError(username, message);
-  expect(email.getAttribute("aria-invalid")).toBeNull();
-  expect(screen.queryByRole("alert")).toBeNull();
-
-  fireEvent.change(username, { target: { value: "AnotherSupporter" } });
-  expect(screen.queryByText(message)).toBeNull();
-  expect(username.getAttribute("aria-invalid")).toBeNull();
-});
 
 it("shows a generic registration conflict without marking the email field", async () => {
   registrationConflict = { detail: "Registration could not be completed" };
-  const { username, email, submit } = await fillRegistration();
+  const { name, email, submit } = await fillRegistration();
   fireEvent.click(submit);
   expect((await screen.findByRole("alert")).textContent).toBe("Nu am putut crea contul cu aceste date.");
-  expect(username.getAttribute("aria-invalid")).toBeNull();
+  expect(name.getAttribute("aria-invalid")).toBeNull();
   expect(email.getAttribute("aria-invalid")).toBeNull();
 });
 
-it.each([false, true])("displays the email conflict with username conflict=%s", async (both) => {
-  registrationConflict = {
-    errors: {
-      email: "Email is already registered",
-      ...(both ? { username: "Username is already taken" } : {}),
-    },
-  };
-  const { username, email, submit } = await fillRegistration();
+it("displays the email conflict without marking the public name and clears it on edit", async () => {
+  registrationConflict = { errors: { email: "Email is already registered" } };
+  const { name, email, submit } = await fillRegistration();
   fireEvent.click(submit);
   const message = "Această adresă de e-mail este deja înregistrată.";
   await screen.findByText(message);
   expectFieldError(email, message);
-  if (both) {
-    expectFieldError(username, "Acest nume de utilizator este deja folosit.");
-  } else {
-    expect(username.getAttribute("aria-invalid")).toBeNull();
-  }
+  expect(name.getAttribute("aria-invalid")).toBeNull();
   fireEvent.change(email, { target: { value: "new@example.test" } });
   expect(email.getAttribute("aria-invalid")).toBeNull();
   expect(screen.queryByText(message)).toBeNull();
-  if (both) expectFieldError(username, "Acest nume de utilizator este deja folosit.");
 });
 
 it.each([
@@ -180,7 +174,7 @@ it.each([
     window.history.replaceState(null, "", "/login");
     render(<App />);
     await screen.findByRole("link", { name: "Cont nou" });
-    fireEvent.change(screen.getByLabelText("Nume de utilizator"), { target: { value: account.username } });
+    fireEvent.change(screen.getByLabelText("Adresă de email"), { target: { value: account.email } });
     fireEvent.change(screen.getByLabelText("Parolă"), { target: { value: "good password" } });
     fireEvent.click(screen.getByRole("button", { name: "Intră în cont" }));
   }
@@ -209,69 +203,52 @@ it.each([
   window.history.replaceState(null, "", path);
   render(<App />);
   await screen.findByRole("link", { name: "Cont nou" });
-  const button = screen.getByRole("button", { name: submitLabel });
-  expect(button.closest("form")?.noValidate).toBe(true);
-  fireEvent.click(button);
-
-  const username = screen.getByLabelText("Nume de utilizator");
-  const password = screen.getByLabelText("Parolă");
-  expectFieldError(username, "Introdu numele de utilizator.");
-  expectFieldError(password, "Introdu parola.");
-  if (path === "/register") {
-    expectFieldError(screen.getByLabelText("E-mail"), "Introdu adresa de e-mail.");
-  }
-
-  fireEvent.change(username, { target: { value: "Supporter" } });
-  expect(screen.queryByText("Introdu numele de utilizator.")).toBeNull();
-  expect(username.getAttribute("aria-invalid")).toBeNull();
-  expectFieldError(password, "Introdu parola.");
+  fireEvent.click(screen.getByRole("button", { name: submitLabel }));
+  expectFieldError(screen.getByLabelText("Adresă de email"), "Introdu adresa de email.");
+  expectFieldError(screen.getByLabelText("Parolă"), "Introdu parola.");
+  if (path === "/register") expectFieldError(screen.getByLabelText("Nume"), "Introdu numele.");
+  else expect(screen.queryByLabelText("Nume")).toBeNull();
+  fireEvent.change(screen.getByLabelText("Adresă de email"), { target: { value: account.email } });
+  expect(screen.queryByText("Introdu adresa de email.")).toBeNull();
+  expectFieldError(screen.getByLabelText("Parolă"), "Introdu parola.");
   expectNoAuthRequest();
 });
 
-it("validates registration username, email and minimum password length inline", async () => {
+it("validates registration name, email and password without requiring a unique name", async () => {
   window.history.replaceState(null, "", "/register");
   render(<App />);
   await screen.findByRole("link", { name: "Cont nou" });
-  const username = screen.getByLabelText("Nume de utilizator");
-  const email = screen.getByLabelText("E-mail");
+  const name = screen.getByLabelText("Nume");
+  const email = screen.getByLabelText("Adresă de email");
   const password = screen.getByLabelText("Parolă");
-
-  fireEvent.change(username, { target: { value: "fan!" } });
+  fireEvent.change(name, { target: { value: "x".repeat(65) } });
   fireEvent.change(email, { target: { value: "invalid-email" } });
   fireEvent.change(password, { target: { value: "scurt" } });
   fireEvent.click(screen.getByRole("button", { name: "Creează cont" }));
-  expectFieldError(username, "Folosește între 3 și 32 de litere latine, cifre sau caractere _.");
-  expectFieldError(email, "Introdu o adresă de e-mail validă.");
+  expectFieldError(name, "Numele poate avea cel mult 64 de caractere.");
+  expectFieldError(email, "Introdu o adresă de email validă.");
   expectFieldError(password, "Parola trebuie să aibă cel puțin 8 caractere.");
   expectNoAuthRequest();
-
-  fireEvent.change(username, { target: { value: "Fan_2026" } });
-  fireEvent.change(email, { target: { value: account.email } });
+  fireEvent.change(name, { target: { value: "  Suporter Ștefan  " } });
+  fireEvent.change(email, { target: { value: "  FAN@EXAMPLE.TEST  " } });
   fireEvent.change(password, { target: { value: "good password" } });
-  for (const field of [username, email, password]) {
-    expect(field.getAttribute("aria-invalid")).toBeNull();
-    expect(field.nextElementSibling?.textContent).toBe("");
-  }
-
   fireEvent.click(screen.getByRole("button", { name: "Creează cont" }));
-  expect(await screen.findByText(/Contul a fost creat/)).toBeTruthy();
+  await screen.findByText(/Contul a fost creat/);
+  const call = fetcher.mock.calls.find(([url]) => String(url).endsWith("/auth/register"));
+  expect(JSON.parse(String(call?.[1]?.body))).toEqual({ displayName: "Suporter Ștefan", email: "fan@example.test", password: "good password" });
 });
 
-it("validates login username length and the UTF-8 password limit inline", async () => {
+it("validates the login email and UTF-8 password limit", async () => {
   window.history.replaceState(null, "", "/login");
   render(<App />);
   await screen.findByRole("link", { name: "Cont nou" });
-  const username = screen.getByLabelText("Nume de utilizator");
-  const password = screen.getByLabelText("Parolă");
-
-  fireEvent.change(username, { target: { value: "x".repeat(33) } });
-  fireEvent.change(password, { target: { value: "ă".repeat(37) } });
+  const email = screen.getByLabelText<HTMLInputElement>("Adresă de email");
+  expect(email.type).toBe("email");
+  expect(email.autocomplete).toBe("email");
+  fireEvent.change(email, { target: { value: "x".repeat(250) + "@example.test" } });
+  fireEvent.change(screen.getByLabelText("Parolă"), { target: { value: "ă".repeat(37) } });
   fireEvent.click(screen.getByRole("button", { name: "Intră în cont" }));
-  expectFieldError(username, "Numele de utilizator poate avea cel mult 32 de caractere.");
-  expectFieldError(password, "Parola poate avea cel mult 72 de octeți.");
+  expectFieldError(email, "Adresa de email poate avea cel mult 254 de caractere.");
+  expectFieldError(screen.getByLabelText("Parolă"), "Parola poate avea cel mult 72 de octeți.");
   expectNoAuthRequest();
-
-  fireEvent.change(password, { target: { value: "ă".repeat(36) } });
-  expect(screen.queryByText("Parola poate avea cel mult 72 de octeți.")).toBeNull();
-  expect(password.getAttribute("aria-invalid")).toBeNull();
 });

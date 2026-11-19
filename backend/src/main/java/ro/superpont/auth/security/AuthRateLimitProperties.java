@@ -13,7 +13,7 @@ import org.springframework.validation.annotation.Validated;
 public record AuthRateLimitProperties(
         @NotNull @Valid Limit loginIp,
         @NotNull @Valid Limit registrationIp,
-        @NotNull @Valid Limit loginUsername) {
+        @NotNull @Valid Limit loginEmail) {
 
     public record Limit(
             @Positive int attempts,

@@ -1,6 +1,6 @@
 package ro.superpont.auth.security;
 
-import java.util.Locale;
+import ro.superpont.auth.validation.EmailAddress;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -11,12 +11,12 @@ public final class AuthRateLimiter {
 
     private final SlidingWindowLimiter loginIp;
     private final SlidingWindowLimiter registrationIp;
-    private final SlidingWindowLimiter loginUsername;
+    private final SlidingWindowLimiter loginEmail;
 
     public AuthRateLimiter(AuthRateLimitProperties properties) {
         loginIp = limiter(properties.loginIp());
         registrationIp = limiter(properties.registrationIp());
-        loginUsername = limiter(properties.loginUsername());
+        loginEmail = limiter(properties.loginEmail());
     }
 
     private static SlidingWindowLimiter limiter(AuthRateLimitProperties.Limit limit) {
@@ -31,8 +31,8 @@ public final class AuthRateLimiter {
         check(registrationIp.acquire(address));
     }
 
-    public void checkLoginUsername(String username) {
-        check(loginUsername.acquire(username.toLowerCase(Locale.ROOT)));
+    public void checkLoginEmail(String email) {
+        check(loginEmail.acquire(EmailAddress.normalize(email)));
     }
 
     private static void check(long retryAfter) {

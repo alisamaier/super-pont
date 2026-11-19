@@ -1,0 +1,146 @@
+.main-container.rules-page {
+  max-width: 860px;
+  padding-block: 44px 64px;
+}
+
+.rules-page:focus,
+.rules-scoring:focus {
+  outline: none;
+}
+
+.rules-heading {
+  position: relative;
+  padding: 0 58px 30px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.rules-icon {
+  position: absolute;
+  right: 0;
+  top: 6px;
+  color: var(--lime);
+}
+
+.rules-heading h1 {
+  margin: 8px 0 12px;
+  font: 700 clamp(40px, 7vw, 56px) / 1 "Barlow Condensed", sans-serif;
+}
+
+.rules-heading > p:last-child {
+  color: #a5b2c4;
+  font-size: 15px;
+}
+
+.rules-section {
+  padding-block: 28px;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 24px;
+  font-size: 14px;
+  line-height: 1.85;
+  color: #b8c3d2;
+}
+
+.rules-section h2 {
+  margin-bottom: 14px;
+  color: #edf0f5;
+  font-size: 20px;
+  line-height: 1.4;
+}
+
+.rules-section p + p {
+  margin-top: 12px;
+}
+
+.rules-section strong {
+  color: #edf0f5;
+}
+
+.rules-section ul {
+  padding-left: 22px;
+  margin-block: 14px;
+}
+
+.rules-section li + li {
+  margin-top: 8px;
+}
+
+.rules-section li::marker {
+  color: var(--lime);
+}
+
+.rules-formula {
+  margin-block: 20px;
+  padding: 16px 20px;
+  border-left: 3px solid var(--lime);
+  border-radius: 0 6px 6px 0;
+  background: #141e28;
+  overflow-wrap: anywhere;
+}
+
+.rules-table-wrap {
+  margin-block: 20px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.rules-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.rules-table caption {
+  padding: 14px;
+  text-align: left;
+  color: #a5b2c4;
+  font-size: 12px;
+}
+
+.rules-table :is(th, td) {
+  padding: 12px 10px;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.rules-table thead {
+  background: #19222e;
+  color: #edf0f5;
+}
+
+.rules-table tbody tr:nth-child(even) {
+  background: #101620;
+}
+
+.rules-table td:last-child strong {
+  color: var(--lime);
+}
+
+.rules-section .rules-table-note {
+  color: #a5b2c4;
+  font-size: 12px;
+}
+
+@media (max-width: 600px) {
+  .main-container.rules-page {
+    padding-block: 28px 40px;
+  }
+
+  .rules-section {
+    padding-block: 24px;
+  }
+
+  .rules-section h2 {
+    font-size: 18px;
+  }
+
+  .rules-formula {
+    padding: 14px;
+  }
+
+  .rules-table :is(th, td) {
+    padding: 12px 6px;
+  }
+}

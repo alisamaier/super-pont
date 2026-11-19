@@ -23,7 +23,7 @@ import type { Predictions, PredictionResult } from "./types";
 const fixtures = matches.slice(0, 3).map(toFixture);
 const fetcher = vi.fn<typeof fetch>();
 const storageKey = "super-pont:predictions:api-v1";
-const account = { id: "20000000-0000-0000-0000-000000000002", username: "fan", email: "fan@example.test", role: "USER" };
+const account = { id: "20000000-0000-0000-0000-000000000002", displayName: "fan", email: "fan@example.test", role: "USER" };
 let serverPredictions: Predictions;
 let serverResults: Record<string, PredictionResult>;
 let signedIn: boolean;
@@ -312,6 +312,7 @@ describe("prediction validation in the application", () => {
     serverPredictions[fixtures[0].id] = { home: 2, away: 1 };
     await renderRound();
     fill(1, "6", "");
+    fireEvent.click(screen.getByText(account.displayName).closest("summary")!);
     fireEvent.click(screen.getByRole("button", { name: "Deconectare" }));
     await screen.findByText(/pentru a completa și salva pronosticuri/);
     for (const [index, name] of [[0, "Nord"], [1, "Est"]] as const) {
@@ -390,11 +391,62 @@ describe("season leaderboard", () => {
       return failure ? new Response(null, { status: 503 }) : Response.json(page([], 0, 20));
     });
     render(<App />);
-    expect(screen.getByText("Se încarcă clasamentul…")).toBeTruthy();
-    expect((await screen.findByRole("alert")).textContent).toContain("HTTP 503");
+    expect(screen.getByText("Se verifică sesiunea…")).toBeTruthy();
+    expect((await screen.findByRole("alert")).textContent).toContain("Clasamentul nu este disponibil momentan.");
+    expect(screen.getByRole("alert").textContent).not.toMatch(/HTTP|API|503/);
     failure = false;
     fireEvent.click(screen.getByRole("button", { name: "Încearcă din nou" }));
-    expect(await screen.findByText("Încă nu există pronosticuri evaluate.")).toBeTruthy();
+    expect(await screen.findByText("Încă nu există un clasament pentru sezonul curent.")).toBeTruthy();
+  });
+});
+
+describe("rules navigation", () => {
+  it.each([false, true])("opens the scoring deep link with signedIn=%s even when the schedule fails", async (authenticated) => {
+    signedIn = authenticated;
+    window.history.replaceState(null, "", "/regulament#punctaj");
+    fetcher.mockResolvedValue(new Response(null, { status: 503 }));
+    render(<App />);
+    expect(screen.getByRole("heading", { name: "Regulament" })).toBeTruthy();
+    expect(document.activeElement?.id).toBe("punctaj");
+    expect(screen.getAllByRole("main")).toHaveLength(1);
+    const navigation = within(screen.getByRole("navigation", { name: "Navigare principală" }));
+    expect(navigation.getByRole("link", { name: "Regulament" }).getAttribute("aria-current")).toBe("page");
+    expect(navigation.getByRole("button", { name: "Meciuri" }).getAttribute("aria-pressed")).toBe("false");
+    if (authenticated) expect(await screen.findByText(account.displayName)).toBeTruthy();
+    else expect(await screen.findByRole("link", { name: "Intră în cont" })).toBeTruthy();
+    expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(8);
+  });
+
+  it("links from saved predictions to scoring and preserves drafts when returning", async () => {
+    await renderRound();
+    fill(0, "2", "1");
+    fireEvent.click(screen.getByRole("button", { name: /Pronosticurile mele/ }));
+    const help = screen.getByRole("link", { name: "Cum se calculează punctele?" });
+    expect(help.getAttribute("href")).toBe("/regulament#punctaj");
+    fireEvent.click(help);
+    expect(window.location.pathname + window.location.hash).toBe("/regulament#punctaj");
+    expect(document.activeElement?.id).toBe("punctaj");
+    fireEvent.click(screen.getByRole("button", { name: "Meciuri" }));
+    expect(card(0).getByRole<HTMLInputElement>("textbox", { name: "Scor Nord" }).value).toBe("2");
+    expect(card(0).getByRole<HTMLInputElement>("textbox", { name: "Scor Sud" }).value).toBe("1");
+    expect(window.location.hash).toBe("");
+  });
+
+  it("links from the leaderboard and handles back navigation and native hash changes", async () => {
+    fetcher.mockImplementation(async (input) => new URL(String(input)).pathname === "/api/leaderboard/superliga"
+      ? Response.json(page([])) : footballResponse(input));
+    window.history.replaceState(null, "", "/clasament");
+    render(<App />);
+    fireEvent.click(await screen.findByRole("link", { name: "Cum se calculează punctele?" }));
+    expect(document.activeElement?.id).toBe("punctaj");
+    window.history.replaceState(null, "", "/clasament");
+    fireEvent.popState(window);
+    expect(screen.getByRole("heading", { name: "Clasament" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("link", { name: "Regulament" }));
+    expect(document.activeElement?.id).toBe("regulament");
+    window.history.replaceState(null, "", "/regulament#punctaj");
+    fireEvent(window, new HashChangeEvent("hashchange"));
+    expect(document.activeElement?.id).toBe("punctaj");
   });
 });
 

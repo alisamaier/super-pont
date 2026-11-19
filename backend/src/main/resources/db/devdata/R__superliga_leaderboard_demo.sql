@@ -7,6 +7,18 @@ SELECT '20000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-00000000
 WHERE '${leaderboardDemo}' = 'true'
 ON CONFLICT DO NOTHING;
 
+-- Visibility examples are opt-in with the leaderboard demo. Never reset saved preferences on rerun.
+INSERT INTO users (id, display_name, email, password_hash, role, created_at, hide_predictions_until_kickoff)
+SELECT CAST(demo.id AS UUID), demo.display_name, demo.email,
+       '$2a$10$hPGL4YOCoe7vjq/x1moUX.JB7u017jJGjYt4k84JXoRAb2XCVq3xq', 'USER',
+       TIMESTAMP WITH TIME ZONE '2026-05-01 12:00:00+00', demo.hide
+FROM (VALUES
+    ('20000000-0000-0000-0000-000000000006', 'demo_ascuns@leaderboard.example.test', 'Demo ascuns', TRUE),
+    ('20000000-0000-0000-0000-000000000007', 'demo_public@leaderboard.example.test', 'Demo public', FALSE)
+) AS demo(id, email, display_name, hide)
+WHERE '${leaderboardDemo}' = 'true'
+ON CONFLICT DO NOTHING;
+
 INSERT INTO season_teams (season_id, team_id)
 SELECT CAST('20000000-0000-0000-0000-000000000003' AS UUID), id
 FROM teams
@@ -57,15 +69,15 @@ FROM (VALUES
 WHERE '${leaderboardDemo}' = 'true'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO users (id, username, display_name, email, password_hash, role, created_at)
-SELECT CAST(demo.id AS UUID), demo.username, demo.display_name, demo.username || '@leaderboard.example.test',
-       demo.password_hash, 'USER', TIMESTAMP WITH TIME ZONE '2026-05-01 12:00:00+00'
+INSERT INTO users (id, display_name, email, password_hash, role, created_at, hide_predictions_until_kickoff)
+SELECT CAST(demo.id AS UUID), demo.display_name, demo.email,
+       demo.password_hash, 'USER', TIMESTAMP WITH TIME ZONE '2026-05-01 12:00:00+00', TRUE
 FROM (VALUES
-    ('20000000-0000-0000-0000-000000000001', 'demo_ana', 'Ana', '$2a$10$hPGL4YOCoe7vjq/x1moUX.JB7u017jJGjYt4k84JXoRAb2XCVq3xq'),
-    ('20000000-0000-0000-0000-000000000002', 'demo_radu', 'Radu', '$2a$10$/qW.ocXS2fMQcUt3SLJv6eGWTz213sguN/j5oKeKaDlWVNKmkrsdy'),
-    ('20000000-0000-0000-0000-000000000004', 'demo_mara', 'Mara', '$2a$10$RwwxkUFsl8gtZRRt/icitOjZ2rSiTvewnKrq/hhvtbIrWdcgp323G'),
-    ('20000000-0000-0000-0000-000000000005', 'demo_vlad', 'Vlad', '$2a$10$vWN2QuqgPI3FwKXnAFI8KOL4BoAwwRmCpnsVAf8Su3XUc42FodY0K')
-) AS demo(id, username, display_name, password_hash)
+    ('20000000-0000-0000-0000-000000000001', 'demo_ana@leaderboard.example.test', 'Ana', '$2a$10$hPGL4YOCoe7vjq/x1moUX.JB7u017jJGjYt4k84JXoRAb2XCVq3xq'),
+    ('20000000-0000-0000-0000-000000000002', 'demo_radu@leaderboard.example.test', 'Radu', '$2a$10$/qW.ocXS2fMQcUt3SLJv6eGWTz213sguN/j5oKeKaDlWVNKmkrsdy'),
+    ('20000000-0000-0000-0000-000000000004', 'demo_mara@leaderboard.example.test', 'Mara', '$2a$10$RwwxkUFsl8gtZRRt/icitOjZ2rSiTvewnKrq/hhvtbIrWdcgp323G'),
+    ('20000000-0000-0000-0000-000000000005', 'demo_vlad@leaderboard.example.test', 'Vlad', '$2a$10$vWN2QuqgPI3FwKXnAFI8KOL4BoAwwRmCpnsVAf8Su3XUc42FodY0K')
+) AS demo(id, email, display_name, password_hash)
 WHERE '${leaderboardDemo}' = 'true'
 ON CONFLICT DO NOTHING;
 
@@ -85,7 +97,14 @@ FROM (VALUES
     ('20000000-0000-0000-0000-000000000059', '20000000-0000-0000-0000-000000000005', '20000000-0000-0000-0000-000000000041', 5, 0),
     ('20000000-0000-0000-0000-000000000060', '20000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000044', 3, 2),
     ('20000000-0000-0000-0000-000000000061', '20000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000044', 1, 3),
-    ('20000000-0000-0000-0000-000000000062', '20000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000042', 1, 1)
+    ('20000000-0000-0000-0000-000000000062', '20000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000042', 1, 1),
+    ('20000000-0000-0000-0000-000000000063', '20000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-000000000044', 2, 0),
+    ('20000000-0000-0000-0000-000000000064', '20000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-000000000042', 1, 2),
+    ('20000000-0000-0000-0000-000000000065', '20000000-0000-0000-0000-000000000007', '20000000-0000-0000-0000-000000000044', 3, 1),
+    ('20000000-0000-0000-0000-000000000066', '20000000-0000-0000-0000-000000000007', '20000000-0000-0000-0000-000000000042', 2, 2),
+    -- Evaluated predictions make both visibility examples discoverable in the leaderboard.
+    ('20000000-0000-0000-0000-000000000067', '20000000-0000-0000-0000-000000000006', '20000000-0000-0000-0000-000000000041', 0, 0),
+    ('20000000-0000-0000-0000-000000000068', '20000000-0000-0000-0000-000000000007', '20000000-0000-0000-0000-000000000041', 1, 0)
 ) AS demo(id, user_id, match_id, home_score, away_score)
 JOIN users u ON u.id = CAST(demo.user_id AS UUID)
 JOIN football_matches m ON m.id = CAST(demo.match_id AS UUID)

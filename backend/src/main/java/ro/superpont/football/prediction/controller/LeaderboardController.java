@@ -1,6 +1,7 @@
 package ro.superpont.football.prediction.controller;
 
 import java.util.UUID;
+import java.security.Principal;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,15 +27,16 @@ public class LeaderboardController {
     }
 
     @GetMapping("/superliga")
-    public PageView<LeaderboardRow> currentSuperLiga(
+    public ResponseEntity<PageView<LeaderboardRow>> currentSuperLiga(
             @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
-        return leaderboard.currentSuperLiga(page, size);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(leaderboard.currentSuperLiga(page, size));
     }
 
     @GetMapping("/superliga/users/{userId}/predictions")
     public ResponseEntity<PublicUserPredictions> userPredictions(@PathVariable UUID userId,
-            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            Principal principal) {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
-                .body(publicPredictions.currentSuperLiga(userId, page, size));
+                .body(publicPredictions.currentSuperLiga(userId, page, size, UUID.fromString(principal.getName())));
     }
 }

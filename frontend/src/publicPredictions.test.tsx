@@ -54,7 +54,7 @@ beforeEach(() => {
   };
   fetcher.mockReset().mockImplementation(async (input) => {
     const url = new URL(String(input));
-    if (url.pathname === "/api/users/me") return new Response(null, { status: 401 });
+    if (url.pathname === "/api/users/me") return Response.json({ id: userId, displayName: "demo_ana", role: "USER" });
     if (url.pathname === "/api/leaderboard/superliga") {
       return Response.json({
         ...page([{ userId, rank: 1, displayName: "Ana", totalPoints: data.totalPoints }]),
@@ -134,9 +134,23 @@ it("shows an error and lets the user retry into the empty state", async () => {
   publicStatus = 503;
   render(<UserPredictionsPage userId={userId} leaderboardPage={0} onNavigate={() => {}} />);
   expect(screen.getByRole("status").textContent).toContain("Se încarcă");
-  expect((await screen.findByRole("alert")).textContent).toContain("HTTP 503");
+  expect((await screen.findByRole("alert")).textContent).toContain("Pronosticurile nu sunt disponibile momentan.");
+  expect(screen.getByRole("alert").textContent).not.toMatch(/HTTP|API|503/);
   data.predictions = page([]);
   publicStatus = 200;
   fireEvent.click(screen.getByRole("button", { name: "Încearcă din nou" }));
   expect(await screen.findByText("Niciun pronostic în acest sezon.")).toBeTruthy();
+});
+
+it("shows future scores when revealed by the server and hides them after a preference refresh", async () => {
+  data.predictions = page([{ ...hidden, visibility: "REVEALED", predictedScore: { home: 3, away: 1 }, result: null }]);
+  render(<UserPredictionsPage userId={userId} leaderboardPage={0} onNavigate={() => {}} />);
+  expect(await screen.findByText("3–1", { exact: true })).toBeTruthy();
+  const call = fetcher.mock.calls.find(([url]) => String(url).includes(`/users/${userId}/predictions`));
+  expect(call?.[1]?.credentials).toBe("include");
+  expect(call?.[1]?.cache).toBe("no-store");
+  data.predictions = page([hidden]);
+  fireEvent(window, new Event("focus"));
+  expect(await screen.findByText("Disponibil după începerea meciului")).toBeTruthy();
+  expect(screen.queryByText("3–1", { exact: true })).toBeNull();
 });

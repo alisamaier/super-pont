@@ -32,7 +32,7 @@ app:
       registration-ip:
         attempts: 3
         window: 10m
-      login-username:
+      login-email:
         attempts: 5
         window: 1m
 

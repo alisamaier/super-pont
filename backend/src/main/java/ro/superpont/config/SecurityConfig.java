@@ -26,6 +26,9 @@ import org.springframework.security.web.authentication.session.CompositeSessionA
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
+import org.springframework.web.filter.CorsFilter;
+import ro.superpont.auth.repository.UserRepository;
+import ro.superpont.auth.security.SessionVersionFilter;
 import org.springframework.security.web.csrf.CsrfAuthenticationStrategy;
 import org.springframework.security.web.csrf.CsrfTokenRepository;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
@@ -40,11 +43,12 @@ public class SecurityConfig {
 
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityContextRepository contexts,
-            CsrfTokenRepository csrfTokens, JsonMapper json) throws Exception {
+            CsrfTokenRepository csrfTokens, JsonMapper json, UserRepository users) throws Exception {
         return http
                 .cors(withDefaults())
                 .csrf(csrf -> csrf.csrfTokenRepository(csrfTokens))
                 .securityContext(context -> context.securityContextRepository(contexts))
+                .addFilterAfter(new SessionVersionFilter(users, json), CorsFilter.class)
                 .requestCache(cache -> cache.disable())
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) ->
@@ -58,10 +62,14 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/me", "/api/predictions/me").authenticated()
                         .requestMatchers(HttpMethod.HEAD, "/api/predictions/me").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/users/me/settings").authenticated()
+                        .requestMatchers(HttpMethod.HEAD, "/api/users/me/settings").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/users/me/settings").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/users/me/profile", "/api/users/me/password").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/leaderboard/superliga",
-                                "/api/leaderboard/superliga/users/{userId}/predictions").permitAll()
+                                "/api/leaderboard/superliga/users/{userId}/predictions").authenticated()
                         .requestMatchers(HttpMethod.HEAD, "/api/leaderboard/superliga",
-                                "/api/leaderboard/superliga/users/{userId}/predictions").permitAll()
+                                "/api/leaderboard/superliga/users/{userId}/predictions").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/matches/{matchId}/prediction").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/matches/{matchId}/prediction").authenticated()
                         .requestMatchers(HttpMethod.GET, FOOTBALL_PATHS).permitAll()

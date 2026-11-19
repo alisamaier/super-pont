@@ -1,9 +1,8 @@
 package ro.superpont.auth.service;
 
 import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
-import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -18,6 +17,8 @@ import ro.superpont.auth.dto.RegisterRequest;
 import ro.superpont.auth.dto.UserView;
 import ro.superpont.auth.model.User;
 import ro.superpont.auth.repository.UserRepository;
+import ro.superpont.auth.security.AccountPrincipal;
+import ro.superpont.auth.validation.EmailAddress;
 import ro.superpont.common.DomainException;
 
 @Service
@@ -36,51 +37,36 @@ public class UserService implements UserDetailsService {
         if (!fitsBcrypt(request.password())) {
             throw DomainException.invalid("Password must be at most 72 UTF-8 bytes");
         }
-        String username = request.username().toLowerCase(Locale.ROOT);
-        String email = request.email().toLowerCase(Locale.ROOT);
-        rejectRegistrationConflicts(username, email);
-        var user = new User(username, email, passwords.encode(request.password()));
+        String email = EmailAddress.normalize(request.email());
+        rejectRegistrationConflicts(email);
+        var user = new User(request.displayName(), email, passwords.encode(request.password()));
         try {
             return transactions.execute(status -> UserView.from(users.saveAndFlush(user)));
         } catch (DataIntegrityViolationException exception) {
             if (exception.getCause() instanceof ConstraintViolationException constraint
                     && constraint.getKind() == ConstraintViolationException.ConstraintKind.UNIQUE) {
                 // The failed insert has rolled back, so the query can see the winning registration.
-                rejectRegistrationConflicts(username, email);
+                rejectRegistrationConflicts(email);
             }
             throw exception;
         }
     }
 
-    private void rejectRegistrationConflicts(String username, String email) {
-        Map<String, String> errors = new LinkedHashMap<>();
-        for (var match : users.findByUsernameOrEmail(username, email)) {
-            if (username.equals(match.getUsername())) {
-                errors.put("username", "Username is already taken");
-            }
-            if (email.equals(match.getEmail())) {
-                errors.put("email", "Email is already registered");
-            }
-        }
-        if (!errors.isEmpty()) {
-            throw new RegistrationConflictException(errors);
-        }
+    private void rejectRegistrationConflicts(String email) {
+        if (users.existsByEmail(email)) throw new RegistrationConflictException(Map.of("email", "Email is already registered"));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public UserDetails loadUserByUsername(String username) {
-        var user = users.findByUsername(username.toLowerCase(Locale.ROOT))
+    public UserDetails loadUserByUsername(String email) {
+        var user = users.findByEmail(EmailAddress.normalize(email))
                 .orElseThrow(() -> new UsernameNotFoundException("Unknown account"));
-        return org.springframework.security.core.userdetails.User.withUsername(user.getUsername())
-                .password(user.getPasswordHash())
-                .roles(user.getRole().name())
-                .build();
+        return new AccountPrincipal(user);
     }
 
     @Transactional(readOnly = true)
-    public UserView currentUser(String username) {
-        return users.findByUsername(username)
+    public UserView currentUser(UUID userId) {
+        return users.findById(userId)
                 .map(UserView::from)
                 .orElseThrow(() -> new DomainException(HttpStatus.UNAUTHORIZED, "Account unavailable"));
     }

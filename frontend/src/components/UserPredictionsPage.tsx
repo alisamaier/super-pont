@@ -1,8 +1,9 @@
 import { useEffect, useState, type MouseEvent } from "react";
-import { ArrowLeft, LoaderCircle, RotateCw, TriangleAlert } from "lucide-react";
+import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { getPublicPredictions, type PublicPrediction } from "../api/publicPredictions";
 import { useResource } from "../hooks/useResource";
 import { matchStatusLabels } from "../lib/fixtures";
+import { LoadError } from "./LoadError";
 
 const dateTime = new Intl.DateTimeFormat("ro-RO", { dateStyle: "medium", timeStyle: "short" });
 const load = (key: string, signal: AbortSignal) => {
@@ -28,7 +29,7 @@ export function UserPredictionsPage({
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refresh);
     let timer: number | undefined;
-    if (data && data.predictions.items.length > 0) {
+    if (data) {
       const nextDeadline = Math.min(...data.predictions.items
         .filter((item) => item.visibility === "HIDDEN")
         .map((item) => Date.parse(item.kickoff) - Date.parse(data.serverTime)));
@@ -57,12 +58,7 @@ export function UserPredictionsPage({
         <LoaderCircle className="schedule-spinner" size={28} aria-hidden="true" />
         <p>Se încarcă pronosticurile…</p>
       </div>}
-      {error && <div className="empty-state" role="alert">
-        <TriangleAlert size={28} aria-hidden="true" />
-        <h1>Pronosticurile nu pot fi încărcate</h1>
-        <p>{error}</p>
-        <button className="text-button" onClick={retry}><RotateCw size={14} /> Încearcă din nou</button>
-      </div>}
+      {error && <LoadError message="Pronosticurile nu sunt disponibile momentan." onRetry={retry} />}
       {data && <>
         <header className="public-predictions-heading">
           <div>

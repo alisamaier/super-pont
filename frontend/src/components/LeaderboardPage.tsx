@@ -1,7 +1,8 @@
-import type { MouseEvent } from "react";
-import { LoaderCircle, RotateCw, TriangleAlert, Trophy } from "lucide-react";
+import { useEffect, type MouseEvent } from "react";
+import { LoaderCircle, Trophy } from "lucide-react";
 import { footballApi } from "../api/football";
 import { useResource } from "../hooks/useResource";
+import { LoadError } from "./LoadError";
 
 const loadLeaderboard = (page: string, signal: AbortSignal) =>
   footballApi.leaderboard(Number(page), signal);
@@ -14,6 +15,18 @@ export function LeaderboardPage({ currentUserId, page, onNavigate }: {
   const { data, error, loading, retry } = useResource(String(page), loadLeaderboard);
   const pagePath = (number: number) => number ? `/clasament?page=${number}` : "/clasament";
 
+  useEffect(() => {
+    const refresh = () => { if (!document.hidden) retry(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    const timer = data ? window.setTimeout(refresh, 60_000) : undefined;
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [data, retry]);
+
   return (
     <main id="clasament" className="main-container leaderboard-page">
       <div className="leaderboard-heading">
@@ -23,26 +36,22 @@ export function LeaderboardPage({ currentUserId, page, onNavigate }: {
           <p>SuperLiga · sezonul curent</p>
         </div>
       </div>
+      <p className="scoring-help">
+        <a href="/regulament#punctaj" onClick={(event) => onNavigate(event, "/regulament#punctaj")}>
+          Cum se calculează punctele?
+        </a>
+      </p>
       {loading && (
         <div className="empty-state" role="status">
           <LoaderCircle className="schedule-spinner" size={28} aria-hidden="true" />
           <p>Se încarcă clasamentul…</p>
         </div>
       )}
-      {error && (
-        <div className="empty-state" role="alert">
-          <TriangleAlert size={28} aria-hidden="true" />
-          <h2>Clasamentul nu poate fi încărcat</h2>
-          <p>{error}</p>
-          <button className="text-button" onClick={retry}>
-            <RotateCw size={14} aria-hidden="true" /> Încearcă din nou
-          </button>
-        </div>
-      )}
+      {error && <LoadError message="Clasamentul nu este disponibil momentan." onRetry={retry} />}
       {data && (
         <>
           {data.totalElements === 0 ? (
-            <p className="empty-state">Încă nu există pronosticuri evaluate.</p>
+            <p className="empty-state">Încă nu există un clasament pentru sezonul curent.</p>
           ) : (
             <table className="leaderboard-table" aria-label="Clasament SuperLiga">
               <thead>

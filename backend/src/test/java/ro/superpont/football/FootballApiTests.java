@@ -119,12 +119,12 @@ class FootballApiTests {
         String admin = "football-admin-" + n;
         String password = "test-admin-password";
         jdbc.update("""
-                INSERT INTO users (id, username, email, password_hash, role, created_at)
+                INSERT INTO users (id, display_name, email, password_hash, role, created_at)
                 VALUES (?, ?, ?, ?, 'ADMIN', CURRENT_TIMESTAMP)
                 """, UUID.randomUUID(), admin, admin + "@example.test", passwords.encode(password));
         session = new TestHttpSession(port, mapper);
         var login = session.request("POST", "/auth/login",
-                Map.of("username", admin, "password", password), session.csrf());
+                Map.of("email", admin + "@example.test", "password", password), session.csrf());
         assertThat(login.statusCode()).as(login.body()).isEqualTo(200);
         csrf = session.csrf();
         String iso = "" + (char) ('A' + n / 26) + (char) ('A' + n % 26);
@@ -162,7 +162,7 @@ class FootballApiTests {
 
     @Test
     void migrationsRunWithoutDevelopmentSeeds() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("4");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("8");
         assertThat(
                         jdbc.queryForObject(
                                 "SELECT COUNT(*) FROM competitions WHERE code = 'RO-SUPERLIGA'",
@@ -175,16 +175,16 @@ class FootballApiTests {
         when(clock.instant()).thenReturn(Instant.parse("2026-11-06T15:00:00Z"));
         String matchId = create("/matches", match());
         String path = "/matches/" + matchId + "/prediction";
-        String username = "fan_" + UUID.randomUUID().toString().substring(0, 8);
+        String name = "fan_" + UUID.randomUUID().toString().substring(0, 8);
         try (var fan = new TestHttpSession(port, mapper);
                 var anotherDevice = new TestHttpSession(port, mapper)) {
             String password = "test-fan-password";
-            var login = Map.of("username", username, "password", password);
+            var login = Map.of("email", name + "@example.test", "password", password);
             assertThat(fan.request("GET", "/predictions/me", null, null).statusCode()).isEqualTo(401);
             assertThat(fan.request("PUT", path, Map.of("homeScore", 0, "awayScore", 99),
                     fan.csrf()).statusCode()).isEqualTo(401);
             var registered = fan.request("POST", "/auth/register",
-                    Map.of("username", username, "email", username + "@example.test", "password", password),
+                    Map.of("displayName", name, "email", name + "@example.test", "password", password),
                     fan.csrf());
             assertThat(registered.statusCode()).as(registered.body()).isEqualTo(200);
             assertThat(fan.request("POST", "/auth/login", login, fan.csrf()).statusCode()).isEqualTo(200);
