@@ -8,10 +8,10 @@ WHERE '${leaderboardDemo}' = 'true'
 ON CONFLICT DO NOTHING;
 
 -- Visibility examples are opt-in with the leaderboard demo. Never reset saved preferences on rerun.
-INSERT INTO users (id, display_name, email, password_hash, role, created_at, hide_predictions_until_kickoff)
+INSERT INTO users (id, display_name, email, password_hash, role, created_at, hide_predictions_until_kickoff, email_verified)
 SELECT CAST(demo.id AS UUID), demo.display_name, demo.email,
        '$2a$10$hPGL4YOCoe7vjq/x1moUX.JB7u017jJGjYt4k84JXoRAb2XCVq3xq', 'USER',
-       TIMESTAMP WITH TIME ZONE '2026-05-01 12:00:00+00', demo.hide
+       TIMESTAMP WITH TIME ZONE '2026-05-01 12:00:00+00', demo.hide, TRUE
 FROM (VALUES
     ('20000000-0000-0000-0000-000000000006', 'demo_ascuns@leaderboard.example.test', 'Demo ascuns', TRUE),
     ('20000000-0000-0000-0000-000000000007', 'demo_public@leaderboard.example.test', 'Demo public', FALSE)
@@ -69,9 +69,9 @@ FROM (VALUES
 WHERE '${leaderboardDemo}' = 'true'
 ON CONFLICT DO NOTHING;
 
-INSERT INTO users (id, display_name, email, password_hash, role, created_at, hide_predictions_until_kickoff)
+INSERT INTO users (id, display_name, email, password_hash, role, created_at, hide_predictions_until_kickoff, email_verified)
 SELECT CAST(demo.id AS UUID), demo.display_name, demo.email,
-       demo.password_hash, 'USER', TIMESTAMP WITH TIME ZONE '2026-05-01 12:00:00+00', TRUE
+       demo.password_hash, 'USER', TIMESTAMP WITH TIME ZONE '2026-05-01 12:00:00+00', TRUE, TRUE
 FROM (VALUES
     ('20000000-0000-0000-0000-000000000001', 'demo_ana@leaderboard.example.test', 'Ana', '$2a$10$hPGL4YOCoe7vjq/x1moUX.JB7u017jJGjYt4k84JXoRAb2XCVq3xq'),
     ('20000000-0000-0000-0000-000000000002', 'demo_radu@leaderboard.example.test', 'Radu', '$2a$10$/qW.ocXS2fMQcUt3SLJv6eGWTz213sguN/j5oKeKaDlWVNKmkrsdy'),
@@ -108,5 +108,105 @@ FROM (VALUES
 ) AS demo(id, user_id, match_id, home_score, away_score)
 JOIN users u ON u.id = CAST(demo.user_id AS UUID)
 JOIN football_matches m ON m.id = CAST(demo.match_id AS UUID)
+WHERE '${leaderboardDemo}' = 'true'
+ON CONFLICT DO NOTHING;
+
+-- 39 more evaluated participants: 45 accounts on a fresh opt-in database.
+-- Each scores 1 point on the finished 0-0 match (prediction 0-4).
+-- They share rank 6 across pages 1, 2 and 3; Vlad follows at rank 45.
+INSERT INTO users (id, display_name, email, password_hash, role, created_at, email_verified)
+SELECT CAST(demo.id AS UUID), demo.display_name, demo.email,
+       '$2a$10$hPGL4YOCoe7vjq/x1moUX.JB7u017jJGjYt4k84JXoRAb2XCVq3xq',
+       'USER', TIMESTAMP WITH TIME ZONE '2026-05-01 12:00:00+00', TRUE
+FROM (VALUES
+    ('30000000-0000-0000-0000-000000000001', 'Participant 01', 'participant01@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000002', 'Participant 02', 'participant02@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000003', 'Participant 03', 'participant03@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000004', 'Participant 04', 'participant04@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000005', 'Participant 05', 'participant05@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000006', 'Participant 06', 'participant06@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000007', 'Participant 07', 'participant07@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000008', 'Participant 08', 'participant08@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000009', 'Participant 09', 'participant09@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000010', 'Participant 10', 'participant10@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000011', 'Participant 11', 'participant11@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000012', 'Participant 12', 'participant12@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000013', 'Participant 13', 'participant13@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000014', 'Participant 14', 'participant14@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000015', 'Participant 15', 'participant15@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000016', 'Participant 16', 'participant16@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000017', 'Participant 17', 'participant17@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000018', 'Participant 18', 'participant18@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000019', 'Participant 19', 'participant19@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000020', 'Participant 20', 'participant20@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000021', 'Participant 21', 'participant21@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000022', 'Participant 22', 'participant22@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000023', 'Participant 23', 'participant23@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000024', 'Participant 24', 'participant24@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000025', 'Participant 25', 'participant25@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000026', 'Participant 26', 'participant26@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000027', 'Participant 27', 'participant27@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000028', 'Participant 28', 'participant28@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000029', 'Participant 29', 'participant29@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000030', 'Participant 30', 'participant30@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000031', 'Participant 31', 'participant31@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000032', 'Participant 32', 'participant32@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000033', 'Participant 33', 'participant33@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000034', 'Participant 34', 'participant34@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000035', 'Participant 35', 'participant35@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000036', 'Participant 36', 'participant36@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000037', 'Participant 37', 'participant37@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000038', 'Participant 38', 'participant38@leaderboard.example.test'),
+    ('30000000-0000-0000-0000-000000000039', 'Participant 39', 'participant39@leaderboard.example.test')
+) AS demo(id, display_name, email)
+WHERE '${leaderboardDemo}' = 'true'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO predictions (id, user_id, match_id, home_score, away_score, created_at, updated_at)
+SELECT CAST(demo.id AS UUID), u.id, m.id, 0, 4,
+       m.kickoff - INTERVAL '1' DAY, m.kickoff - INTERVAL '1' DAY
+FROM (VALUES
+    ('31000000-0000-0000-0000-000000000001', '30000000-0000-0000-0000-000000000001'),
+    ('31000000-0000-0000-0000-000000000002', '30000000-0000-0000-0000-000000000002'),
+    ('31000000-0000-0000-0000-000000000003', '30000000-0000-0000-0000-000000000003'),
+    ('31000000-0000-0000-0000-000000000004', '30000000-0000-0000-0000-000000000004'),
+    ('31000000-0000-0000-0000-000000000005', '30000000-0000-0000-0000-000000000005'),
+    ('31000000-0000-0000-0000-000000000006', '30000000-0000-0000-0000-000000000006'),
+    ('31000000-0000-0000-0000-000000000007', '30000000-0000-0000-0000-000000000007'),
+    ('31000000-0000-0000-0000-000000000008', '30000000-0000-0000-0000-000000000008'),
+    ('31000000-0000-0000-0000-000000000009', '30000000-0000-0000-0000-000000000009'),
+    ('31000000-0000-0000-0000-000000000010', '30000000-0000-0000-0000-000000000010'),
+    ('31000000-0000-0000-0000-000000000011', '30000000-0000-0000-0000-000000000011'),
+    ('31000000-0000-0000-0000-000000000012', '30000000-0000-0000-0000-000000000012'),
+    ('31000000-0000-0000-0000-000000000013', '30000000-0000-0000-0000-000000000013'),
+    ('31000000-0000-0000-0000-000000000014', '30000000-0000-0000-0000-000000000014'),
+    ('31000000-0000-0000-0000-000000000015', '30000000-0000-0000-0000-000000000015'),
+    ('31000000-0000-0000-0000-000000000016', '30000000-0000-0000-0000-000000000016'),
+    ('31000000-0000-0000-0000-000000000017', '30000000-0000-0000-0000-000000000017'),
+    ('31000000-0000-0000-0000-000000000018', '30000000-0000-0000-0000-000000000018'),
+    ('31000000-0000-0000-0000-000000000019', '30000000-0000-0000-0000-000000000019'),
+    ('31000000-0000-0000-0000-000000000020', '30000000-0000-0000-0000-000000000020'),
+    ('31000000-0000-0000-0000-000000000021', '30000000-0000-0000-0000-000000000021'),
+    ('31000000-0000-0000-0000-000000000022', '30000000-0000-0000-0000-000000000022'),
+    ('31000000-0000-0000-0000-000000000023', '30000000-0000-0000-0000-000000000023'),
+    ('31000000-0000-0000-0000-000000000024', '30000000-0000-0000-0000-000000000024'),
+    ('31000000-0000-0000-0000-000000000025', '30000000-0000-0000-0000-000000000025'),
+    ('31000000-0000-0000-0000-000000000026', '30000000-0000-0000-0000-000000000026'),
+    ('31000000-0000-0000-0000-000000000027', '30000000-0000-0000-0000-000000000027'),
+    ('31000000-0000-0000-0000-000000000028', '30000000-0000-0000-0000-000000000028'),
+    ('31000000-0000-0000-0000-000000000029', '30000000-0000-0000-0000-000000000029'),
+    ('31000000-0000-0000-0000-000000000030', '30000000-0000-0000-0000-000000000030'),
+    ('31000000-0000-0000-0000-000000000031', '30000000-0000-0000-0000-000000000031'),
+    ('31000000-0000-0000-0000-000000000032', '30000000-0000-0000-0000-000000000032'),
+    ('31000000-0000-0000-0000-000000000033', '30000000-0000-0000-0000-000000000033'),
+    ('31000000-0000-0000-0000-000000000034', '30000000-0000-0000-0000-000000000034'),
+    ('31000000-0000-0000-0000-000000000035', '30000000-0000-0000-0000-000000000035'),
+    ('31000000-0000-0000-0000-000000000036', '30000000-0000-0000-0000-000000000036'),
+    ('31000000-0000-0000-0000-000000000037', '30000000-0000-0000-0000-000000000037'),
+    ('31000000-0000-0000-0000-000000000038', '30000000-0000-0000-0000-000000000038'),
+    ('31000000-0000-0000-0000-000000000039', '30000000-0000-0000-0000-000000000039')
+) AS demo(id, user_id)
+JOIN users u ON u.id = CAST(demo.user_id AS UUID)
+JOIN football_matches m ON m.id = '20000000-0000-0000-0000-000000000041'
 WHERE '${leaderboardDemo}' = 'true'
 ON CONFLICT DO NOTHING;

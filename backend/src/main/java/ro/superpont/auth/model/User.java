@@ -10,6 +10,9 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 64)
     private String displayName;
 
+    @Column(name = "display_name_key", nullable = false, length = 128, insertable = false, updatable = false)
+    private String displayNameKey;
+
     @Column(nullable = false)
     private boolean hidePredictionsUntilKickoff;
 
@@ -18,6 +21,9 @@ public class User extends BaseEntity {
 
     @Column(nullable = false, length = 254)
     private String email;
+
+    @Column(nullable = false)
+    private boolean emailVerified;
 
     @Column(nullable = false, length = 60)
     private String passwordHash;
@@ -67,6 +73,12 @@ public class User extends BaseEntity {
     public String getEmail() {
         return email;
     }
+
+    public boolean isEmailVerified() { return emailVerified; }
+
+    public void verifyEmail() { emailVerified = true; }
+
+    public void correctEmail(String email) { this.email = email; }
 
     public String getPasswordHash() {
         return passwordHash;

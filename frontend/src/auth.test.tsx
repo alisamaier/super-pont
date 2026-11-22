@@ -6,12 +6,16 @@ import { footballResponse, matches, page } from "./api/football.test-data";
 const account = { id: "user-id", displayName: "Suporter", email: "fan@example.test", role: "USER" };
 const fetcher = vi.fn<typeof fetch>();
 let signedIn: boolean;
+let unverified: boolean;
+const pendingRegistration = { id: account.id, email: account.email, state: "PENDING", serverTime: "2026-11-01T18:00:00Z",
+  codeExpiresAt: "2026-11-01T18:10:00Z", resendAvailableAt: "2026-11-01T18:01:00Z", attemptsRemaining: 5, deliveryStatus: "SENT" };
 let registrationConflict: object | undefined;
 let throttled: { path: "login" | "register"; retryAfter: string | null } | undefined;
 
 beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-01T18:00:00Z"));
   signedIn = false;
+  unverified = false;
   registrationConflict = undefined;
   throttled = undefined;
   window.history.replaceState(null, "", "/");
@@ -35,11 +39,16 @@ beforeEach(() => {
       case "/api/auth/register":
         return registrationConflict
           ? Response.json(registrationConflict, { status: 409 })
-          : Response.json(account);
+          : Response.json(pendingRegistration);
+      case "/api/auth/registration":
+        return Response.json(pendingRegistration);
+      case "/api/auth/registration/confirm":
+        return Response.json({ ...pendingRegistration, state: "VERIFIED" });
       case "/api/auth/login":
         if (JSON.parse(String(init?.body)).password !== "good password") {
           return new Response(null, { status: 401 });
         }
+        if (unverified) return Response.json(pendingRegistration, { status: 202 });
         signedIn = true;
         return Response.json(account);
       case "/api/auth/logout":
@@ -70,7 +79,11 @@ it("registers, signs in, restores the session on reload and signs out", async ()
   fireEvent.change(screen.getByLabelText("Adresă de email"), { target: { value: account.email } });
   fireEvent.change(screen.getByLabelText("Parolă"), { target: { value: "good password" } });
   fireEvent.click(screen.getByRole("button", { name: "Creează cont" }));
-  expect(await screen.findByText(/Contul a fost creat/)).toBeTruthy();
+  await screen.findByLabelText("Cod de verificare");
+  expect(window.location.pathname).toBe("/confirma-email");
+  fireEvent.change(screen.getByLabelText("Cod de verificare"), { target: { value: "001234" } });
+  fireEvent.click(screen.getByRole("button", { name: "Confirmă contul" }));
+  expect(await screen.findByText("Contul a fost confirmat. Te poți autentifica.")).toBeTruthy();
   expect(window.location.pathname).toBe("/login");
   expect((screen.getByLabelText("Adresă de email") as HTMLInputElement).value).toBe(account.email);
 
@@ -106,10 +119,10 @@ it("registers, signs in, restores the session on reload and signs out", async ()
   expect(authCalls.every(([, init]) => init?.credentials === "include")).toBe(true);
   const writes = authCalls.filter(([, init]) => init?.method === "POST");
   expect(writes.map(([url]) => new URL(String(url)).pathname)).toEqual([
-    "/api/auth/register", "/api/auth/login", "/api/auth/logout",
+    "/api/auth/register", "/api/auth/registration/confirm", "/api/auth/login", "/api/auth/logout",
   ]);
   expect(writes.every(([, init]) => new Headers(init?.headers).get("X-CSRF-TOKEN") === "session-csrf")).toBe(true);
-  expect(authCalls.filter(([url]) => String(url).endsWith("/auth/csrf"))).toHaveLength(3);
+  expect(authCalls.filter(([url]) => String(url).endsWith("/auth/csrf"))).toHaveLength(4);
   expect(localStorage.length).toBe(0);
 });
 
@@ -122,6 +135,27 @@ it("shows an invalid credentials error on the direct login page", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Intră în cont" }));
   expect(await screen.findByText(/parola este incorectă/)).toBeTruthy();
   expect(window.location.pathname).toBe("/login");
+});
+
+it("resumes an unverified login without normal access and restores verification on refresh", async () => {
+  unverified = true;
+  window.history.replaceState(null, "", "/login?next=%2Fclasament%3Fpage%3D1");
+  render(<App />);
+  await screen.findByRole("link", { name: "Cont nou" });
+  fireEvent.change(screen.getByLabelText("Adresă de email"), { target: { value: account.email } });
+  fireEvent.change(screen.getByLabelText("Parolă"), { target: { value: "good password" } });
+  fireEvent.click(screen.getByRole("button", { name: "Intră în cont" }));
+  await screen.findByLabelText("Cod de verificare");
+  expect(window.location.pathname).toBe("/confirma-email");
+  expect(new URLSearchParams(window.location.search).get("next")).toBe("/clasament?page=1");
+  expect(screen.queryByRole("link", { name: "Clasament" })).toBeNull();
+  cleanup();
+  render(<App />);
+  await screen.findByLabelText("Cod de verificare");
+  fireEvent.click(screen.getByRole("link", { name: "Regulament" }));
+  expect(screen.getByRole("heading", { name: "Regulament" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Meciuri" }));
+  expect(await screen.findByRole("heading", { name: "Meciurile etapei" })).toBeTruthy();
 });
 
 async function fillRegistration() {
@@ -155,6 +189,19 @@ it("displays the email conflict without marking the public name and clears it on
   expect(name.getAttribute("aria-invalid")).toBeNull();
   fireEvent.change(email, { target: { value: "new@example.test" } });
   expect(email.getAttribute("aria-invalid")).toBeNull();
+  expect(screen.queryByText(message)).toBeNull();
+});
+
+it("shows a taken name next to Nume without changing email-based login", async () => {
+  registrationConflict = { errors: { displayName: "Display name is already registered" } };
+  const { name, email, submit } = await fillRegistration();
+  fireEvent.click(submit);
+  const message = "Acest nume este deja folosit. Alege altul.";
+  await screen.findByText(message);
+  expectFieldError(name, message);
+  expect(email.getAttribute("aria-invalid")).toBeNull();
+  fireEvent.change(name, { target: { value: "Alt nume" } });
+  expect(name.getAttribute("aria-invalid")).toBeNull();
   expect(screen.queryByText(message)).toBeNull();
 });
 
@@ -233,7 +280,7 @@ it("validates registration name, email and password without requiring a unique n
   fireEvent.change(email, { target: { value: "  FAN@EXAMPLE.TEST  " } });
   fireEvent.change(password, { target: { value: "good password" } });
   fireEvent.click(screen.getByRole("button", { name: "Creează cont" }));
-  await screen.findByText(/Contul a fost creat/);
+  await screen.findByLabelText("Cod de verificare");
   const call = fetcher.mock.calls.find(([url]) => String(url).endsWith("/auth/register"));
   expect(JSON.parse(String(call?.[1]?.body))).toEqual({ displayName: "Suporter Ștefan", email: "fan@example.test", password: "good password" });
 });

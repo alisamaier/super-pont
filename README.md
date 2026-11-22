@@ -24,6 +24,7 @@ docker compose up --build
 - Frontend static health file: http://localhost:5173/health.json
 - Backend health: http://localhost:8080/actuator/health
 - PostgreSQL: 127.0.0.1:5433
+- Mailpit inbox: http://localhost:8025 (SMTP: 127.0.0.1:1025)
 
 Compose runs Java 25 through the Gradle Wrapper and Node 22 through Vite.
 The first run downloads build dependencies. The browser API URL uses localhost;
@@ -40,7 +41,7 @@ update the role separately or recreate the disposable volume.
 ## Run applications on the host
 
 Install JDK 25 and Node.js 22; set `JAVA_HOME` to JDK 25.
-Complete the root `.env` setup above and run `docker compose up -d db`.
+Complete the root `.env` setup above and run `docker compose up -d db mailpit`.
 
 Frontend:
 
@@ -92,8 +93,9 @@ update `FRONTEND_URL` and restart the backend. No Vite proxy is needed.
 1. Start the stack and open Super Pont at `http://localhost:5173`. Use
    `localhost` for both the frontend and API.
 2. Click **Cont nou**. Register with a public **Nume**, a unique email and a password
-   of at least eight characters and at most 72 UTF-8 bytes. Confirm the app
-   opens the sign-in page with the email filled in.
+   of at least eight characters and at most 72 UTF-8 bytes. The app opens
+   **Confirmă adresa de email**. Read the code in [Mailpit](http://localhost:8025),
+   confirm it, then sign in. An unverified account cannot use protected features.
 3. Sign in with that email and password. The public name appears in the header
    and persists when you reload. In the browser network panel, `GET /api/users/me`
    returns the profile and the API sets an HttpOnly `JSESSIONID` cookie.
@@ -101,10 +103,146 @@ update `FRONTEND_URL` and restart the backend. No Vite proxy is needed.
    to `GET /api/users/me` now returns `401`, and the football schedule still loads.
 5. Try registering the same email with different capitalization or surrounding
    whitespace, or signing in with a wrong password. The form should display an
-   error. Names can be duplicated; email login ignores case and surrounding whitespace.
+   error. Names are unique regardless of capitalization or surrounding whitespace;
+   email login still ignores case and surrounding whitespace.
 
 See the [authentication API](backend/README.md#authentication) for CSRF headers,
 status codes, and local admin setup.
+
+## Local email verification with Mailpit
+
+From the repository root in PowerShell, use an ignored `.env` with a nonempty
+`POSTGRES_PASSWORD`. Create it only if it does not already exist:
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+# Set POSTGRES_PASSWORD in .env before starting.
+podman compose up -d --build
+podman compose restart backend
+```
+
+With Docker, run `docker compose up -d --build` and `docker compose restart backend`.
+Open [Super Pont registration](http://localhost:5173/register) and the
+[Mailpit inbox](http://localhost:8025). Compose delivers SMTP to `mailpit:1025`;
+it requires no mail credentials and sends nothing to the real recipient.
+Any unique address such as `fan@example.test` works locally. For a host-run
+backend, the `dev` profile defaults to `127.0.0.1:1025`; start just the dependencies
+with `podman compose up -d db mailpit` and export the database settings above.
+
+The six-digit code lasts 10 minutes and permits five incorrect attempts. Paste
+it into the single code field and click **Confirmă contul**. Successful confirmation
+opens login with **Contul a fost confirmat. Te poți autentifica.** Refreshing the
+confirmation page resumes through an HttpOnly registration cookie. If the cookie
+expires or is lost, sign in with the pending account's email and password to resume.
+Login resumes the existing code and counters; it does not send a new email.
+
+**Retrimite codul** and email corrections have a server-enforced 60-second cooldown.
+They invalidate the previous code. Email sending is limited to six attempts per
+registration per hour and 20 per client IP per rolling hour, including failed SMTP
+attempts. Correcting the email or logging in again does not reset these limits.
+Only a pending account's registration cookie can authorize an email correction.
+Existing accounts are deliberately marked legacy verified by Flyway V9, and demo
+accounts are inserted as verified. Passwords, predictions, points, and preferences
+are preserved.
+
+To test an actual delivery outage locally:
+
+```powershell
+podman compose stop mailpit
+# Register a new address: the confirmation page explains that delivery failed.
+podman compose start mailpit
+# Wait for the displayed cooldown, then use Retrimite codul and read Mailpit.
+```
+
+The pending account survives the failure. You can also leave the page, sign in
+with its correct credentials, and retry; no second registration is needed.
+Mail delivery uses bounded SMTP timeouts. An SMTP outage does not mark the whole
+application unhealthy; database health checks remain enabled.
+
+## Local password recovery
+
+Password recovery uses the same SMTP integration and Mailpit inbox as email
+confirmation. From the repository root, start or update the local stack:
+
+```powershell
+podman compose up -d --build
+podman compose restart backend
+```
+
+Docker equivalents: `docker compose up -d --build` and
+`docker compose restart backend`. Open [login](http://localhost:5173/login),
+choose **Ai uitat parola?**, enter an existing account's email, and click
+**Trimite linkul**. Open [Mailpit](http://localhost:8025), read **Super Pont —
+Resetează parola**, and open **Alege o parolă nouă**. Enter matching passwords
+and click **Resetează parola**. Login then displays **Parola a fost resetată.
+Autentifică-te cu noua parolă.** Use the new password to sign in.
+
+`PASSWORD_RESET_FRONTEND_URL=http://localhost:5173` configures the frontend origin
+used in reset links (HTTP(S), no trailing slash or path). It defaults to
+`FRONTEND_URL` when omitted. Set it to the public HTTPS frontend origin in
+production; no additional SMTP credentials or services are required beyond the
+existing SMTP variables below. A host-run backend reads exported environment
+variables; Compose reads the ignored root `.env`.
+
+Each link contains 32 cryptographically random bytes and lasts 30 minutes. Only
+its SHA-256 hash is stored. Opening or requesting a link changes neither the
+password nor existing sessions. Requesting another link preserves earlier
+unexpired links. Successful reset consumes every reset link for that account and
+revokes its sessions through the persisted password version. Account name,
+email-verification state, predictions, points, and preferences are preserved.
+An unverified account still needs email confirmation after resetting its password.
+
+Known and unknown emails always receive the same confirmation. SMTP failures
+also return that message to avoid exposing whether an account exists; retry the
+request after delivery is restored. To test locally, run `podman compose stop
+mailpit`, request a link, then `podman compose start mailpit` and request again.
+Allow about 35 seconds after restarting Mailpit for the backend's DNS caches to
+expire if the local container receives a different IP address.
+Previously delivered links remain usable during an outage.
+
+Default rolling limits per backend instance: three requests per normalized email
+per hour, ten requests per IP per hour, thirty validation/reset submissions per
+IP per 15 minutes, and ten per token per 15 minutes. Failures count too. Exceeding
+a limit returns `429` with `Retry-After`. These use the existing bounded in-memory
+auth limiter and can be configured using `APP_AUTH_RATE_LIMIT_PASSWORD_RESET_EMAIL_ATTEMPTS`,
+`APP_AUTH_RATE_LIMIT_PASSWORD_RESET_IP_ATTEMPTS`,
+`APP_AUTH_RATE_LIMIT_PASSWORD_RESET_SUBMISSION_IP_ATTEMPTS`, and
+`APP_AUTH_RATE_LIMIT_PASSWORD_RESET_TOKEN_ATTEMPTS` (corresponding `_WINDOW`
+variables accept durations such as `1h` or `15m`).
+
+Reset tokens stay in URL fragments, so page requests and access logs do not
+receive them. The frontend uses `no-referrer` before loading resources and sends
+the token only in CSRF-protected POST bodies to the backend. Do not add analytics
+that capture reset fragments or log auth request bodies.
+
+### Real SMTP delivery
+
+Configure these environment variables in the backend host's settings (Spring
+does not load `.env` files automatically). No SMTP provider credentials are included
+in this repository. Supply the actual host, port, credentials, and a provider-approved
+sender/domain before using real delivery. [backend/.env.example](backend/.env.example)
+also includes placeholders.
+
+```dotenv
+SMTP_HOST=smtp.provider.example
+SMTP_PORT=587
+SMTP_USERNAME=your-smtp-username
+SMTP_PASSWORD=your-smtp-password
+SMTP_AUTH=true
+SMTP_STARTTLS_ENABLED=true
+SMTP_STARTTLS_REQUIRED=true
+SMTP_SSL_ENABLED=false
+SMTP_FROM=Super Pont <no-reply@your-verified-domain.example>
+```
+
+For provider-required implicit TLS on port 465, use `SMTP_SSL_ENABLED=true`,
+`SMTP_STARTTLS_ENABLED=false`, and `SMTP_STARTTLS_REQUIRED=false`. TLS certificate
+and hostname verification remain enabled. Keep production off the `dev` profile.
+Compose is deliberately wired to local Mailpit; configure real SMTP on the
+production backend rather than placing secrets in frontend `VITE_*` variables.
+Messages include Romanian plain text and HTML alternatives, the code, and its
+UTC expiration time. Codes and SMTP credentials are never returned in API JSON
+or written to application logs.
 
 ## Verify predictions in PostgreSQL
 
@@ -142,7 +280,13 @@ podman compose restart backend
 Use `docker compose up -d` if you use Docker. Open
 [Clasament](http://localhost:5173/clasament) and sign in as `demo_ana@leaderboard.example.test` with
 `SuperPontDemo2026!` to highlight Ana's row. The sample ranks are Ana 18 (1),
-Mara 13 and Radu 13 (2), Demo ascuns 10 (4), Demo public 4 (5), and Vlad 0 (6).
+Mara 13 and Radu 13 (2), Demo ascuns 10 (4), Demo public 4 (5),
+39 numbered participants on 1 point (all rank 6), and Vlad 0 (45).
+On a fresh demo database this gives 45 users with evaluated predictions:
+20 on page 1, 20 on page 2, and 5 on page 3. Participant 15 at the end
+of page 1 and Participant 16 at the start of page 2 both retain rank 6.
+The numbered participants use `participant01@leaderboard.example.test` through
+`participant39@leaderboard.example.test`, with the same demo password.
 To see Ana's predictions in the ticket,
 open matchday **Etapa 17** on the matches page.
 
@@ -153,6 +297,13 @@ on the same total. Points continue to come only from finished matches.
 Click **Ana** in the leaderboard to open her current-season predictions. You can
 also open [Ana's predictions](http://localhost:5173/clasament/utilizatori/20000000-0000-0000-0000-000000000001)
 directly. To compare accounts, sign in as `demo_radu@leaderboard.example.test` with the same demo password.
+Use the numbered pages or **Înapoi** / **Înainte** below the table. Page indexes
+in the URL are zero-based: `/clasament?page=2` opens the last demo page.
+Refresh, open a user's predictions, and use **Înapoi la clasament** to check
+page restoration. Selecting another competition resets to page 1; competition
+and season IDs are retained in page and prediction links. With more registered
+accounts, the counts and last page adjust automatically. The repeatable seed
+preserves existing users, preferences, predictions, and corrected results.
 Ana and Radu have hidden predictions for **Etapa 18**, a scheduled game on
 20 June 2027. Their live game in **Etapa 17** shows the predicted score and
 pending points. The two finished games show the same evaluated points as
@@ -185,7 +336,9 @@ loading. Rows already inserted stay in the local database.
 
 The public-name menu opens **Setările contului**, with independent
 **Profil**, **Schimbă parola**, and **Pronosticuri** sections. Display names may
-contain up to 64 characters, may be duplicated, and do not change the login email. Password changes
+contain up to 64 characters, are unique regardless of capitalization or surrounding
+whitespace, and do not change the login email. Saving your current name or changing
+only its capitalization is allowed. Password changes
 require the current password and a new registration-valid password, then require
 login again on every session. New accounts have prediction hiding disabled;
 existing accounts retain their saved choice.
@@ -276,6 +429,7 @@ so local development defaults are disabled.
 | `DATABASE_USERNAME` | Neon database role |
 | `DATABASE_PASSWORD` | Neon role password, stored only in Render |
 | `FRONTEND_URL` | Exact frontend HTTPS origin, without a trailing slash or path |
+| `PASSWORD_RESET_FRONTEND_URL` | Optional frontend origin for password-reset emails; defaults to `FRONTEND_URL`. No trailing slash or path. |
 | `PORT` | Supplied by Render; defaults to 8080 |
 | `SESSION_COOKIE_SECURE` | Defaults to `true`. The local `dev` profile defaults to `false` for HTTP. |
 | `SESSION_COOKIE_SAME_SITE` | Defaults to `lax`. |

@@ -272,3 +272,19 @@
     padding: 7px 6px;
   }
 }
+.verification-card h1 {
+  line-height: 1.15;
+}
+.verification-email {
+  overflow-wrap: anywhere;
+}
+#verification-code {
+  font-size: 28px;
+  letter-spacing: .3em;
+  font-variant-numeric: tabular-nums;
+}
+.verification-card .text-button {
+  display: block;
+  min-height: 44px;
+  margin-block: 8px;
+}

@@ -3,6 +3,7 @@ package ro.superpont.auth.dto;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import ro.superpont.auth.validation.EmailAddress;
+import ro.superpont.auth.validation.DisplayName;
 import jakarta.validation.constraints.Size;
 
 public record RegisterRequest(
@@ -10,7 +11,7 @@ public record RegisterRequest(
         @NotBlank @Email @Size(max = 254) String email,
         @NotBlank @Size(min = 8, max = 72) String password) {
     public RegisterRequest {
-        displayName = displayName == null ? null : displayName.strip();
+        displayName = DisplayName.normalize(displayName);
         email = EmailAddress.normalize(email);
     }
 }

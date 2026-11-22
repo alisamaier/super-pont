@@ -13,6 +13,7 @@ import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
@@ -35,6 +36,22 @@ class AuthApiTests {
     @Autowired JdbcTemplate jdbc;
     @MockitoSpyBean PasswordEncoder passwords;
     @MockitoBean AuthRateLimiter rateLimiter;
+    @MockitoBean ro.superpont.auth.service.VerificationEmailSender mail;
+    private final Map<String, String> codes = new java.util.concurrent.ConcurrentHashMap<>();
+
+    @BeforeEach
+    void captureMail() {
+        doAnswer(call -> {
+            codes.put(call.getArgument(0), call.getArgument(1));
+            return null;
+        }).when(mail).send(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(java.time.Instant.class));
+    }
+
+    private void confirm(TestHttpSession session, String email) throws Exception {
+        var response = session.request("POST", "/auth/registration/confirm", Map.of("code", codes.get(email)), session.csrf());
+        assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
+    }
 
     @Test
     void registersLogsInRotatesSessionAndLogsOut() throws Exception {
@@ -51,12 +68,12 @@ class AuthApiTests {
                             "password", PASSWORD, "role", "ADMIN"), csrf);
             assertThat(registered.statusCode()).isEqualTo(200);
             var profile = json.readTree(registered.body());
-            assertThat(profile.get("displayName").asText()).isEqualTo("MatchFan");
+            assertThat(profile.get("state").asText()).isEqualTo("PENDING");
             assertThat(profile.get("email").asText()).isEqualTo("fan@example.test");
-            assertThat(profile.get("role").asText()).isEqualTo("USER");
+            assertThat(jdbc.queryForObject("SELECT role FROM users WHERE email = 'fan@example.test'", String.class)).isEqualTo("USER");
             assertThat(profile.has("passwordHash")).isFalse();
             assertThat(profile.has("username")).isFalse();
-            assertThat(profile.hasNonNull("createdAt")).isTrue();
+            assertThat(jdbc.queryForObject("SELECT display_name FROM users WHERE email = 'fan@example.test'", String.class)).isEqualTo("MatchFan");
             String hash = jdbc.queryForObject(
                     "SELECT password_hash FROM users WHERE email = 'fan@example.test'", String.class);
             assertThat(hash).startsWith("$2").isNotEqualTo(PASSWORD);
@@ -66,6 +83,7 @@ class AuthApiTests {
                     Map.of("email", "fan@example.test", "password", "wrong password"), csrf).statusCode())
                     .isEqualTo(401);
 
+            confirm(session, "fan@example.test");
             var loggedIn = session.request("POST", "/auth/login",
                     Map.of("email", "  FAN@EXAMPLE.TEST  ", "password", PASSWORD), csrf);
             assertThat(loggedIn.statusCode()).isEqualTo(200);
@@ -105,14 +123,14 @@ class AuthApiTests {
                             "password", "é".repeat(37)), csrf).statusCode()).isEqualTo(400);
             assertThat(session.request("POST", "/auth/register", credentials, csrf).statusCode())
                     .isEqualTo(200);
-            assertThat(session.request("POST", "/auth/register",
-                    registration("UniqueFan", "another@example.test"), csrf).statusCode()).isEqualTo(200);
+            assertConflicts(session.request("POST", "/auth/register",
+                    registration("UniqueFan", "another@example.test"), csrf), "displayName");
             assertConflicts(session.request("POST", "/auth/register",
                     registration("OtherFan", "  UNIQUE@example.test  "), csrf), "email");
             assertThat(session.request("POST", "/auth/register",
                     registration("SecondFan", "second@example.test"), csrf).statusCode()).isEqualTo(200);
             assertConflicts(session.request("POST", "/auth/register",
-                    registration("UNIQUEFAN", "SECOND@example.test"), csrf), "email");
+                    registration("ThirdFan", "SECOND@example.test"), csrf), "email");
         }
     }
 
@@ -124,6 +142,7 @@ class AuthApiTests {
             assertThat(session.request("POST", "/countries", country, csrf).statusCode()).isEqualTo(401);
             assertThat(session.request("POST", "/auth/register",
                     registration("staff", "staff@example.test"), csrf).statusCode()).isEqualTo(200);
+            confirm(session, "staff@example.test");
             var login = Map.of("email", "staff@example.test", "password", PASSWORD);
             assertThat(session.request("POST", "/auth/login", login, csrf).statusCode()).isEqualTo(200);
             csrf = session.csrf();
@@ -153,9 +172,9 @@ class AuthApiTests {
                 var requests = Executors.newVirtualThreadPerTaskExecutor()) {
             String firstCsrf = first.csrf(), secondCsrf = second.csrf();
             var firstResult = requests.submit(() -> first.request("POST", "/auth/register",
-                    Map.of("displayName", "Același nume", "email", email, "password", password), firstCsrf));
+                    Map.of("displayName", "Concurent A", "email", email, "password", password), firstCsrf));
             var secondResult = requests.submit(() -> second.request("POST", "/auth/register",
-                    Map.of("displayName", "Același nume", "email", "  RACE-EMAIL@EXAMPLE.TEST  ", "password", password), secondCsrf));
+                    Map.of("displayName", "Concurent B", "email", "  RACE-EMAIL@EXAMPLE.TEST  ", "password", password), secondCsrf));
             var a = firstResult.get(15, TimeUnit.SECONDS);
             var b = secondResult.get(15, TimeUnit.SECONDS);
             assertThat(List.of(a.statusCode(), b.statusCode())).containsExactlyInAnyOrder(200, 409);
@@ -168,7 +187,7 @@ class AuthApiTests {
         var errors = json.readTree(response.body()).path("errors");
         assertThat(errors.propertyNames()).containsExactlyInAnyOrder(fields);
         for (String field : fields) {
-            assertThat(errors.path(field).asText()).isEqualTo("Email is already registered");
+            assertThat(errors.path(field).asText()).isEqualTo(field.equals("displayName") ? "Display name is already registered" : "Email is already registered");
         }
     }
 

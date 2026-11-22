@@ -42,6 +42,7 @@ beforeEach(() => {
         expect(init?.credentials).toBe("include");
         expect(new Headers(init?.headers).get("X-CSRF-TOKEN")).toBe("settings-csrf");
         await profileWait;
+        if (profileStatus === 409) return Response.json({ errors: { displayName: "Display name is already registered" } }, { status: 409 });
         if (profileStatus !== 200) return new Response(null, { status: profileStatus });
         profileName = JSON.parse(String(init?.body)).displayName;
         return Response.json({ ...account, displayName: profileName });
@@ -89,6 +90,43 @@ afterEach(() => {
 
 const toggle = () => screen.getByRole<HTMLInputElement>("switch", { name: "Ascunde pronosticurile mele până la start" });
 const writes = () => fetcher.mock.calls.filter(([input, init]) => String(input).endsWith("/users/me/settings") && init?.method === "PUT");
+
+it("associates a taken-name error with Nume and allows correcting it", async () => {
+  profileStatus = 409;
+  window.history.replaceState(null, "", "/setari-cont");
+  render(<App />);
+  const name = await screen.findByLabelText<HTMLInputElement>("Nume");
+  fireEvent.change(name, { target: { value: "Alisa" } });
+  fireEvent.click(screen.getByRole("button", { name: "Salvează numele" }));
+  expect((await screen.findByRole("alert")).textContent).toBe("Acest nume este deja folosit. Alege altul.");
+  expect(name.getAttribute("aria-invalid")).toBe("true");
+  expect(name.getAttribute("aria-describedby")).toContain("display-name-error");
+  expect(document.getElementById("display-name-error")?.parentElement).toBe(name.parentElement);
+  profileStatus = 200;
+  fireEvent.change(name, { target: { value: "Alisa noua" } });
+  expect(screen.queryByRole("alert")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Salvează numele" }));
+  await screen.findByText("Numele a fost salvat.");
+  expect(name.value).toBe("Alisa noua");
+});
+
+it.each([false, true])("maps the switch directly to the hide setting and restores %s after refresh", async (hide) => {
+  preference = !hide;
+  window.history.replaceState(null, "", "/setari-cont");
+  const app = render(<App />);
+  await screen.findByRole("switch");
+  const explanation = "Activată: pronosticurile tale sunt ascunse până la începerea fiecărui meci. Dezactivată: ceilalți utilizatori autentificați le pot vedea imediat după salvare.";
+  expect(screen.getByText(explanation)).toBeTruthy();
+  expect(toggle().getAttribute("aria-describedby")).toBe("visibility-explanation");
+  fireEvent.click(toggle());
+  await screen.findByText("Setarea a fost salvată.");
+  expect(toggle().checked).toBe(hide);
+  expect(JSON.parse(String(writes()[0][1]?.body))).toEqual({ hidePredictionsUntilKickoff: hide });
+  app.unmount();
+  render(<App />);
+  await screen.findByRole("switch");
+  expect(toggle().checked).toBe(hide);
+});
 
 it("opens settings from the account-name disclosure and supports Escape", async () => {
   preference = false;

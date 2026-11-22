@@ -30,7 +30,7 @@ public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new AuthIpRateLimitInterceptor(rateLimiter))
-                .addPathPatterns("/api/auth/login", "/api/auth/register");
+                .addPathPatterns("/api/auth/login", "/api/auth/register", "/api/auth/registration/**", "/api/auth/password-reset/**");
     }
 
     @Override

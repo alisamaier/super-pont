@@ -2,6 +2,7 @@ package ro.superpont.auth.service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -38,7 +39,7 @@ public class UserService implements UserDetailsService {
             throw DomainException.invalid("Password must be at most 72 UTF-8 bytes");
         }
         String email = EmailAddress.normalize(request.email());
-        rejectRegistrationConflicts(email);
+        rejectRegistrationConflicts(email, request.displayName());
         var user = new User(request.displayName(), email, passwords.encode(request.password()));
         try {
             return transactions.execute(status -> UserView.from(users.saveAndFlush(user)));
@@ -46,14 +47,17 @@ public class UserService implements UserDetailsService {
             if (exception.getCause() instanceof ConstraintViolationException constraint
                     && constraint.getKind() == ConstraintViolationException.ConstraintKind.UNIQUE) {
                 // The failed insert has rolled back, so the query can see the winning registration.
-                rejectRegistrationConflicts(email);
+                rejectRegistrationConflicts(email, request.displayName());
             }
             throw exception;
         }
     }
 
-    private void rejectRegistrationConflicts(String email) {
-        if (users.existsByEmail(email)) throw new RegistrationConflictException(Map.of("email", "Email is already registered"));
+    private void rejectRegistrationConflicts(String email, String name) {
+        Map<String, String> errors = new LinkedHashMap<>();
+        if (users.existsByEmail(email)) errors.put("email", "Email is already registered");
+        if (users.existsByName(name)) errors.put("displayName", "Display name is already registered");
+        if (!errors.isEmpty()) throw new RegistrationConflictException(errors);
     }
 
     @Override

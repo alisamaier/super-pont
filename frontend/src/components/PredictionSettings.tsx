@@ -60,7 +60,11 @@ export function PredictionSettings({ userId }: { userId: string }) {
               disabled={saving} aria-describedby="visibility-explanation"
               onChange={(event) => void toggle(event.target.checked)} />
           </label>
-          <p id="visibility-explanation" className="settings-explanation">Când opțiunea este activată, ceilalți utilizatori conectați pot vedea pronosticurile tale după începerea fiecărui meci. Când este dezactivată, le pot vedea imediat după salvare. Pentru conturile noi, opțiunea este dezactivată implicit.</p>
+          <p id="visibility-explanation" className="settings-explanation">
+            Activată: pronosticurile tale sunt ascunse până la începerea fiecărui meci.
+            <br />{" "}
+            Dezactivată: ceilalți utilizatori autentificați le pot vedea imediat după salvare.
+          </p>
           <p className="settings-explanation">Opțiunea se aplică tuturor pronosticurilor tale, inclusiv celor deja salvate. Tu le poți vedea oricând.</p>
         </>}
         <p className="settings-feedback" role="status" aria-live="polite">

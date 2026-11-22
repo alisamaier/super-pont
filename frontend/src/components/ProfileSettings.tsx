@@ -43,13 +43,13 @@ export function ProfileSettings({ user, onSaved }: { user: AuthUser; onSaved: (u
         <div className="auth-field">
           <label htmlFor="display-name">Nume</label>
           <input id="display-name" autoComplete="nickname" value={name} disabled={saving}
-            aria-describedby="display-name-help" aria-invalid={!!error} onChange={event => { setName(event.target.value); setError(""); setSuccess(""); }} />
+            aria-describedby={error ? "display-name-help display-name-error" : "display-name-help"} aria-invalid={!!error} onChange={event => { setName(event.target.value); setError(""); setSuccess(""); }} />
+          {error && <p id="display-name-error" className="auth-field-error" role="alert">{error}</p>}
           <small id="display-name-help">Cel mult 64 de caractere. Acest nume apare în clasament și lângă pronosticuri.</small>
         </div>
         <button className="primary-button" disabled={saving}>{saving ? "Se salvează numele…" : "Salvează numele"}</button>
       </form>
       <p className="settings-feedback" role="status">{success}</p>
-      {error && <p className="auth-error" role="alert">{error}</p>}
     </section>
   );
 }

@@ -22,6 +22,7 @@ import { predictionError, usePredictions } from "./hooks/usePredictions";
 import { fixtureDays, matchdayLabel } from "./lib/fixtures";
 import { pendingDrafts, type SaveResult } from "./lib/predictions";
 import { loginReturnPath, userPredictionsRoute } from "./lib/navigation";
+import { isUuid } from "./lib/uuid";
 import { MatchCard } from "./components/MatchCard";
 import { LeaderboardPage } from "./components/LeaderboardPage";
 import { RulesPage } from "./components/RulesPage";
@@ -32,6 +33,8 @@ import { CompetitionTabs } from "./components/CompetitionTabs";
 import type { ScoreDraft } from "./types";
 import { authErrorMessage, getCurrentUser, logout, onSessionExpired, type AuthUser } from "./api/auth";
 import { AuthPage } from "./components/AuthPage";
+import { VerificationPage } from "./components/VerificationPage";
+import { PasswordRecoveryPage, ResetPasswordPage } from "./components/PasswordRecoveryPage";
 import { AccountMenu } from "./components/AccountMenu";
 import { AccountSettingsPage } from "./components/AccountSettingsPage";
 import "./App.css";
@@ -41,6 +44,9 @@ function App() {
   const [path, setPath] = useState(() => window.location.pathname + window.location.search + window.location.hash);
   const location = new URL(path, window.location.origin);
   const authPage = location.pathname === "/login" || location.pathname === "/register" ? location.pathname : null;
+  const verificationPage = location.pathname === "/confirma-email";
+  const recoveryPage = location.pathname === "/recuperare-parola";
+  const resetPage = location.pathname === "/reseteaza-parola";
   const selectedUserId = userPredictionsRoute.exec(location.pathname)?.[1];
   const leaderboardPage = location.pathname === "/clasament" || !!selectedUserId;
   const rulesPage = location.pathname === "/regulament";
@@ -48,9 +54,13 @@ function App() {
   const protectedPage = settingsPage || leaderboardPage;
   const returnPath = loginReturnPath(location.searchParams.get("next"), window.location.origin);
   const authQuery = returnPath === "/" ? "" : `?next=${encodeURIComponent(returnPath)}`;
-  const schedulePage = !authPage && !leaderboardPage && !rulesPage && !settingsPage;
+  const schedulePage = !authPage && !verificationPage && !recoveryPage && !resetPage && !leaderboardPage && !rulesPage && !settingsPage;
   const requestedPage = Number(location.searchParams.get("page") ?? "0");
-  const leaderboardPageNumber = Number.isSafeInteger(requestedPage) && requestedPage >= 0 ? requestedPage : 0;
+  const leaderboardPageNumber = Number.isInteger(requestedPage) && requestedPage >= 0 && requestedPage <= 2147483647 ? requestedPage : 0;
+  const competitionQuery = location.searchParams.get("competitionId");
+  const seasonQuery = location.searchParams.get("seasonId");
+  const leaderboardCompetitionId = isUuid(competitionQuery) ? competitionQuery : undefined;
+  const leaderboardSeasonId = isUuid(seasonQuery) ? seasonQuery : undefined;
   const [user, setUser] = useState<AuthUser | null>();
   const [registeredEmail, setRegisteredEmail] = useState("");
   const [loginNotice, setLoginNotice] = useState("");
@@ -256,7 +266,8 @@ function App() {
 
   return (
     <div className="app-shell">
-      <a className="skip-link" href={authPage ? "#auth-content" : settingsPage ? "#account-settings" : rulesPage ? "#regulament" : selectedUserId ? "#user-predictions" : leaderboardPage ? "#clasament" : "#matches"}>
+      <a className="skip-link" href={authPage || verificationPage || recoveryPage || resetPage ? "#auth-content" : settingsPage ? "#account-settings" : rulesPage ? "#regulament" : selectedUserId ? "#user-predictions" : leaderboardPage ? "#clasament" : "#matches"}
+        onClick={resetPage ? event => { event.preventDefault(); document.getElementById("auth-content")?.focus(); } : undefined}>
         {authPage ? "Sari la cont" : settingsPage ? "Sari la setări" : rulesPage ? "Sari la regulament" : leaderboardPage ? "Sari la clasament" : "Sari la meciuri"}
       </a>
       <header className="site-header">
@@ -339,6 +350,15 @@ function App() {
         </div>
       </header>
 
+      {recoveryPage && <PasswordRecoveryPage onNavigate={followLink} />}
+      {resetPage && <ResetPasswordPage key={location.hash} token={new URLSearchParams(location.hash.slice(1)).get("token") ?? ""}
+        onNavigate={followLink} onReset={() => {
+          resetPredictionEdits();
+          setUser(null);
+          setRegisteredEmail("");
+          setLoginNotice("Parola a fost resetată. Autentifică-te cu noua parolă.");
+          navigate("/login", true);
+        }} />}
       {authPage && (
         <AuthPage
           key={authPage}
@@ -351,7 +371,7 @@ function App() {
           onRegistered={(email) => {
             setLoginNotice("");
             setRegisteredEmail(email);
-            navigate(`/login${authQuery}`);
+            navigate(`/confirma-email${authQuery}`);
           }}
           onLogin={(account) => {
             setLoginNotice("");
@@ -362,11 +382,20 @@ function App() {
           }}
         />
       )}
+      {verificationPage && <VerificationPage returnTo={returnPath === "/" ? undefined : returnPath}
+        onNavigate={followLink} onConfirmed={(email) => {
+          setRegisteredEmail(email);
+          setLoginNotice("Contul a fost confirmat. Te poți autentifica.");
+          navigate(`/login${authQuery}`, true);
+        }} />}
       {leaderboardPage && user && (selectedUserId ? (
         <UserPredictionsPage key={`${selectedUserId}/${user?.id ?? "visitor"}`} userId={selectedUserId}
-          leaderboardPage={leaderboardPageNumber} onNavigate={followLink} />
+          leaderboardPage={leaderboardPageNumber} competitionId={leaderboardCompetitionId}
+          seasonId={leaderboardSeasonId} onNavigate={followLink} />
       ) : (
-        <LeaderboardPage currentUserId={user?.id} page={leaderboardPageNumber} onNavigate={followLink} />
+        <LeaderboardPage currentUserId={user?.id} page={leaderboardPageNumber} onNavigate={followLink}
+          competitions={competitions} competitionId={leaderboardCompetitionId} seasonId={leaderboardSeasonId}
+          onRedirect={(destination) => navigate(destination, true)} />
       ))}
       {rulesPage && <RulesPage hash={location.hash} />}
       {settingsPage && user && <AccountSettingsPage key={user.id} user={user}

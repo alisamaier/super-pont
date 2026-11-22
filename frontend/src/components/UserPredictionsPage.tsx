@@ -4,25 +4,31 @@ import { getPublicPredictions, type PublicPrediction } from "../api/publicPredic
 import { useResource } from "../hooks/useResource";
 import { matchStatusLabels } from "../lib/fixtures";
 import { LoadError } from "./LoadError";
+import { leaderboardPath } from "../lib/leaderboard";
 
 const dateTime = new Intl.DateTimeFormat("ro-RO", { dateStyle: "medium", timeStyle: "short" });
 const load = (key: string, signal: AbortSignal) => {
-  const [userId, page] = key.split("/");
-  return getPublicPredictions(userId, Number(page), signal);
+  const [userId, page, competitionId, seasonId] = key.split("/");
+  return getPublicPredictions(userId, Number(page), signal,
+    competitionId && seasonId ? { competitionId, seasonId } : undefined);
 };
 
 export function UserPredictionsPage({
   userId,
   leaderboardPage,
+  competitionId,
+  seasonId,
   onNavigate,
 }: {
   userId: string;
   leaderboardPage: number;
+  competitionId?: string;
+  seasonId?: string;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, destination: string) => void;
 }) {
   const [page, setPage] = useState(0);
-  const { data, loading, error, retry } = useResource(`${userId}/${page}`, load);
-  const returnPath = leaderboardPage ? `/clasament?page=${leaderboardPage}` : "/clasament";
+  const { data, loading, error, retry } = useResource(`${userId}/${page}/${competitionId ?? ""}/${seasonId ?? ""}`, load);
+  const returnPath = leaderboardPath(leaderboardPage, competitionId, seasonId);
 
   useEffect(() => {
     const refresh = () => { if (!document.hidden) retry(); };

@@ -1,6 +1,7 @@
 import { csrfHeaders, sessionFetch } from "./auth";
 import type { AuthUser } from "./auth";
 import { isRecord } from "./page";
+import { displayNameTakenMessage } from "../lib/accountValidation";
 
 export interface AccountSettings {
   hidePredictionsUntilKickoff: boolean;
@@ -34,6 +35,10 @@ async function putAccount(path: string, body: object, signal: AbortSignal) {
   headers.set("Content-Type", "application/json");
   const response = await sessionFetch(path, { method: "PUT", headers, body: JSON.stringify(body), signal, cache: "no-store" });
   if (response.ok) return response;
+  if (response.status === 409 && path.endsWith("/profile")) {
+    const problem = await response.json().catch(() => null);
+    if (typeof problem?.errors?.displayName === "string") throw new Error(displayNameTakenMessage);
+  }
   if (response.status === 400) {
     const problem = await response.json().catch(() => null);
     if (problem?.detail === "Current password is incorrect") throw new Error("Parola actuală este incorectă.");

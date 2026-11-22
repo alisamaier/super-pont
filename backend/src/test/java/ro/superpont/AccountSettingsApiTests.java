@@ -43,6 +43,7 @@ class AccountSettingsApiTests {
     @Autowired Flyway flyway;
     @MockitoBean Clock clock;
     @MockitoBean AuthRateLimiter rateLimiter;
+    @MockitoBean ro.superpont.auth.service.VerificationEmailSender verificationEmail;
 
     @BeforeEach
     void reset() {
@@ -142,8 +143,8 @@ class AccountSettingsApiTests {
             seed.execute(flyway.getConfiguration().getDataSource());
             seed.execute(flyway.getConfiguration().getDataSource());
             assertThat(preference(HIDDEN)).isFalse();
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users", Long.class)).isEqualTo(6);
-            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM predictions", Long.class)).isEqualTo(20);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users", Long.class)).isEqualTo(45);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM predictions", Long.class)).isEqualTo(59);
             assertThat(owner.request("PUT", SETTINGS, Map.of("hidePredictionsUntilKickoff", true), owner.csrf()).statusCode()).isEqualTo(200);
             assertThat(prediction(viewer, HIDDEN, FUTURE).has("predictedScore")).isFalse();
             assertThat(prediction(viewer, HIDDEN, newMatch.toString()).has("predictedScore")).isFalse();
@@ -160,11 +161,48 @@ class AccountSettingsApiTests {
             var registered = session.request("POST", "/auth/register", Map.of("displayName", "settings_new",
                     "email", "settings_new@example.test", "password", PASSWORD), session.csrf());
             assertThat(registered.statusCode()).isEqualTo(200);
+            jdbc.update("UPDATE users SET email_verified = TRUE WHERE email = 'settings_new@example.test'");
             try {
                 login(session, "settings_new");
                 assertThat(get(session, SETTINGS).get("hidePredictionsUntilKickoff").asBoolean()).isFalse();
             } finally {
                 jdbc.update("DELETE FROM users WHERE email = 'settings_new@example.test'");
+            }
+        }
+    }
+
+    @Test
+    void bothTogglePositionsPersistAndControlOnlyOtherAccountsBeforeEachKickoff() throws Exception {
+        var kickoff = Instant.parse("2027-06-20T18:00:00Z");
+        var scope = "?competitionId=10000000-0000-0000-0000-000000000002&seasonId=10000000-0000-0000-0000-000000000003";
+        var selectedPath = "/leaderboard/users/" + HIDDEN + "/predictions" + scope;
+        try (var owner = new TestHttpSession(port, json); var viewer = new TestHttpSession(port, json)) {
+            login(owner, "demo_ascuns@leaderboard.example.test");
+            login(viewer, "demo_public@leaderboard.example.test");
+            for (boolean hide : new boolean[] {true, false, true}) {
+                when(clock.instant()).thenReturn(kickoff.minusNanos(1));
+                var saved = owner.request("PUT", SETTINGS, Map.of("hidePredictionsUntilKickoff", hide), owner.csrf());
+                assertThat(saved.statusCode()).isEqualTo(200);
+                assertThat(json.readTree(saved.body()).get("hidePredictionsUntilKickoff").asBoolean()).isEqualTo(hide);
+                assertThat(get(owner, SETTINGS).get("hidePredictionsUntilKickoff").asBoolean()).isEqualTo(hide);
+                try (var refreshed = new TestHttpSession(port, json)) {
+                    login(refreshed, "demo_ascuns@leaderboard.example.test");
+                    assertThat(get(refreshed, SETTINGS).get("hidePredictionsUntilKickoff").asBoolean()).isEqualTo(hide);
+                }
+                for (var path : java.util.List.of(publicPath(HIDDEN), selectedPath)) {
+                    var otherView = predictionFrom(get(viewer, path), FUTURE);
+                    assertThat(otherView.get("visibility").asText()).isEqualTo(hide ? "HIDDEN" : "REVEALED");
+                    assertThat(otherView.has("predictedScore")).isEqualTo(!hide);
+                    if (!hide) assertRevealed(otherView, 2, 0);
+                    else assertThat(otherView.get("result").isNull()).isTrue();
+                    assertRevealed(predictionFrom(get(owner, path), FUTURE), 2, 0);
+                    assertRevealed(predictionFrom(get(viewer, path), STARTED), 1, 2);
+                }
+                // The viewer's own OFF setting does not expose an owner's hidden predictions.
+                assertThat(get(viewer, SETTINGS).get("hidePredictionsUntilKickoff").asBoolean()).isFalse();
+                when(clock.instant()).thenReturn(kickoff);
+                assertRevealed(prediction(viewer, HIDDEN, FUTURE), 2, 0);
+                assertRevealed(predictionFrom(get(viewer, selectedPath), FUTURE), 2, 0);
             }
         }
     }
@@ -188,7 +226,11 @@ class AccountSettingsApiTests {
     private String publicPath(String owner) { return "/leaderboard/superliga/users/" + owner + "/predictions"; }
 
     private JsonNode prediction(TestHttpSession session, String owner, String match) throws Exception {
-        for (var item : get(session, publicPath(owner)).at("/predictions/items")) {
+        return predictionFrom(get(session, publicPath(owner)), match);
+    }
+
+    private JsonNode predictionFrom(JsonNode ticket, String match) {
+        for (var item : ticket.at("/predictions/items")) {
             if (item.get("matchId").asText().equals(match)) return item;
         }
         throw new AssertionError("Missing prediction for " + match);

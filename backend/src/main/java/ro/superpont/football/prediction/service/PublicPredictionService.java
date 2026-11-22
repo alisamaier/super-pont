@@ -18,6 +18,7 @@ import ro.superpont.football.prediction.dto.PublicUserPredictions;
 import ro.superpont.football.prediction.model.Prediction;
 import ro.superpont.football.prediction.repository.PredictionRepository;
 import ro.superpont.football.season.repository.SeasonRepository;
+import ro.superpont.football.season.model.Season;
 
 @Service
 @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -37,10 +38,22 @@ public class PublicPredictionService {
 
     public PublicUserPredictions currentSuperLiga(UUID userId, int pageNumber, int size, UUID viewerId) {
         page(pageNumber, size, "id");
+        var season = seasons.findCurrentSuperLiga(clock.instant()).orElseThrow(() -> DomainException.missing("Current SuperLiga season"));
+        return predictions(userId, season, pageNumber, size, viewerId);
+    }
+
+    public PublicUserPredictions selectedSeason(UUID userId, UUID competitionId, UUID seasonId,
+            int pageNumber, int size, UUID viewerId) {
+        page(pageNumber, size, "id");
+        var season = seasons.findById(seasonId).orElseThrow(() -> DomainException.missing("Season"));
+        if (!season.getCompetition().getId().equals(competitionId)) throw DomainException.missing("Season");
+        return predictions(userId, season, pageNumber, size, viewerId);
+    }
+
+    private PublicUserPredictions predictions(UUID userId, Season season, int pageNumber, int size, UUID viewerId) {
         var now = clock.instant();
         var owner = users.findById(userId).orElseThrow(() -> DomainException.missing("User"));
         boolean revealBeforeDeadline = !owner.isHidePredictionsUntilKickoff() || owner.getId().equals(viewerId);
-        var season = seasons.findCurrentSuperLiga(now).orElseThrow(() -> DomainException.missing("Current SuperLiga season"));
         var competition = season.getCompetition();
         var sort = Sort.by("match.round.phase.position", "match.round.number").descending()
                 .and(Sort.by("match.kickoff").descending()).and(Sort.by("id"));

@@ -1,4 +1,10 @@
 services:
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
+
   db:
     image: postgres:16-alpine
     environment:
@@ -29,11 +35,21 @@ services:
       DATABASE_USERNAME: ${POSTGRES_USER:-superpont}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      PASSWORD_RESET_FRONTEND_URL: ${PASSWORD_RESET_FRONTEND_URL:-${FRONTEND_URL:-http://localhost:5173}}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      SMTP_AUTH: "false"
+      SMTP_STARTTLS_ENABLED: "false"
+      SMTP_STARTTLS_REQUIRED: "false"
+      SMTP_SSL_ENABLED: "false"
+      SMTP_FROM: ${SMTP_FROM:-Super Pont <no-reply@superpont.local>}
     ports:
       - "8080:8080"
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
 
   frontend:
     image: node:22-alpine

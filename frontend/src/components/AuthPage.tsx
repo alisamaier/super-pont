@@ -9,6 +9,7 @@ import { displayNameError, passwordError, normalizeEmail } from "../lib/accountV
 import {
   authErrorMessage,
   login,
+  isPendingRegistration,
   register,
   registrationFieldErrors,
   type AuthUser,
@@ -120,7 +121,9 @@ export function AuthPage({
         const account = await register({ displayName: String(data.get("displayName")), password, email });
         onRegistered(account.email);
       } else {
-        onLogin(await login({ email, password }));
+        const account = await login({ email, password });
+        if (isPendingRegistration(account)) onRegistered(account.email);
+        else onLogin(account);
       }
     } catch (cause) {
       const conflicts = Object.entries(registrationFieldErrors(cause));
@@ -172,6 +175,7 @@ export function AuthPage({
                 error={fieldErrors.password}
                 onChange={validateChange}
               />
+              {!registering && <a href="/recuperare-parola" onClick={event => onNavigate(event, "/recuperare-parola")}>Ai uitat parola?</a>}
               {error && <p className="auth-error" role="alert">{error}</p>}
               <button className="primary-button" type="submit" disabled={pending || user === undefined}>
                 {pending ? "Se trimite…" : registering ? "Creează cont" : "Intră în cont"}

@@ -39,4 +39,22 @@ public class LeaderboardController {
         return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                 .body(publicPredictions.currentSuperLiga(userId, page, size, UUID.fromString(principal.getName())));
     }
+
+    @GetMapping
+    public ResponseEntity<PageView<LeaderboardRow>> selectedSeason(
+            @RequestParam UUID competitionId, @RequestParam UUID seasonId,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(leaderboard.selectedSeason(competitionId, seasonId, page, size));
+    }
+
+    @GetMapping("/users/{userId}/predictions")
+    public ResponseEntity<PublicUserPredictions> selectedUserPredictions(@PathVariable UUID userId,
+            @RequestParam UUID competitionId, @RequestParam UUID seasonId,
+            @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size,
+            Principal principal) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(publicPredictions.selectedSeason(userId, competitionId, seasonId, page, size,
+                        UUID.fromString(principal.getName())));
+    }
 }

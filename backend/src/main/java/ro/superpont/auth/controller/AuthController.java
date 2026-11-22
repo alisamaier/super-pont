@@ -11,6 +11,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,6 +26,8 @@ import ro.superpont.auth.security.AuthRateLimitException;
 import ro.superpont.auth.security.AuthRateLimiter;
 import ro.superpont.auth.service.RegistrationConflictException;
 import ro.superpont.auth.service.UserService;
+import ro.superpont.auth.service.RegistrationVerificationService;
+import ro.superpont.auth.security.RegistrationCookie;
 import ro.superpont.common.DomainException;
 
 @RestController
@@ -35,14 +38,19 @@ public class AuthController {
     private final SessionAuthenticationStrategy sessions;
     private final SecurityContextRepository contexts;
     private final AuthRateLimiter rateLimiter;
+    private final RegistrationVerificationService verification;
+    private final RegistrationCookie registrationCookie;
 
     public AuthController(UserService users, AuthenticationManager authentication,
-            SessionAuthenticationStrategy sessions, SecurityContextRepository contexts, AuthRateLimiter rateLimiter) {
+            SessionAuthenticationStrategy sessions, SecurityContextRepository contexts, AuthRateLimiter rateLimiter,
+            RegistrationVerificationService verification, RegistrationCookie registrationCookie) {
         this.users = users;
         this.authentication = authentication;
         this.sessions = sessions;
         this.contexts = contexts;
         this.rateLimiter = rateLimiter;
+        this.verification = verification;
+        this.registrationCookie = registrationCookie;
     }
 
     @GetMapping("/auth/csrf")
@@ -51,8 +59,12 @@ public class AuthController {
     }
 
     @PostMapping("/auth/register")
-    public UserView register(@Valid @RequestBody RegisterRequest request) {
-        return users.register(request);
+    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest registration,
+            HttpServletRequest request, HttpServletResponse response) {
+        var user = users.register(registration);
+        var pending = verification.start(user.id(), request.getRemoteAddr());
+        registrationCookie.issue(response, pending.token());
+        return ResponseEntity.ok(pending.view());
     }
 
     @ExceptionHandler(RegistrationConflictException.class)
@@ -71,7 +83,7 @@ public class AuthController {
     }
 
     @PostMapping("/auth/login")
-    public UserView login(@Valid @RequestBody LoginRequest login, HttpServletRequest request,
+    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest login, HttpServletRequest request,
             HttpServletResponse response) {
         rateLimiter.checkLoginEmail(login.email());
         Authentication user;
@@ -81,6 +93,10 @@ public class AuthController {
             }
             user = authentication.authenticate(
                     UsernamePasswordAuthenticationToken.unauthenticated(login.email(), login.password()));
+        } catch (DisabledException exception) {
+            var pending = verification.resume(login.email(), login.password(), request.getRemoteAddr());
+            registrationCookie.issue(response, pending.token());
+            return ResponseEntity.accepted().body(pending.view());
         } catch (BadCredentialsException exception) {
             throw new DomainException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
         }
@@ -90,7 +106,7 @@ public class AuthController {
         context.setAuthentication(user);
         SecurityContextHolder.setContext(context);
         contexts.saveContext(context, request, response);
-        return profile;
+        return ResponseEntity.ok(profile);
     }
 
     @GetMapping("/users/me")

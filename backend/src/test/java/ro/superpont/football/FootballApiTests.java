@@ -37,6 +37,7 @@ class FootballApiTests {
     @Autowired Flyway flyway;
     @Autowired PasswordEncoder passwords;
     @MockitoBean AuthRateLimiter rateLimiter;
+    @MockitoBean ro.superpont.auth.service.VerificationEmailSender verificationEmail;
     @MockitoBean Clock clock;
     TestHttpSession session;
     String csrf;
@@ -119,8 +120,8 @@ class FootballApiTests {
         String admin = "football-admin-" + n;
         String password = "test-admin-password";
         jdbc.update("""
-                INSERT INTO users (id, display_name, email, password_hash, role, created_at)
-                VALUES (?, ?, ?, ?, 'ADMIN', CURRENT_TIMESTAMP)
+                INSERT INTO users (id, display_name, email, password_hash, role, created_at, email_verified)
+                VALUES (?, ?, ?, ?, 'ADMIN', CURRENT_TIMESTAMP, TRUE)
                 """, UUID.randomUUID(), admin, admin + "@example.test", passwords.encode(password));
         session = new TestHttpSession(port, mapper);
         var login = session.request("POST", "/auth/login",
@@ -162,7 +163,7 @@ class FootballApiTests {
 
     @Test
     void migrationsRunWithoutDevelopmentSeeds() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("8");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("11");
         assertThat(
                         jdbc.queryForObject(
                                 "SELECT COUNT(*) FROM competitions WHERE code = 'RO-SUPERLIGA'",
@@ -187,6 +188,7 @@ class FootballApiTests {
                     Map.of("displayName", name, "email", name + "@example.test", "password", password),
                     fan.csrf());
             assertThat(registered.statusCode()).as(registered.body()).isEqualTo(200);
+            jdbc.update("UPDATE users SET email_verified = TRUE WHERE email = ?", name + "@example.test");
             assertThat(fan.request("POST", "/auth/login", login, fan.csrf()).statusCode()).isEqualTo(200);
             String fanCsrf = fan.csrf();
 

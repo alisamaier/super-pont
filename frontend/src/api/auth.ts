@@ -1,5 +1,5 @@
 import { apiUrl } from "../config";
-import { normalizeEmail } from "../lib/accountValidation";
+import { normalizeEmail, displayNameTakenMessage } from "../lib/accountValidation";
 
 export interface AuthUser {
   id: string;
@@ -7,6 +7,21 @@ export interface AuthUser {
   email: string;
   role: "USER" | "ADMIN";
   createdAt: string;
+}
+
+export interface PendingRegistration {
+  id: string;
+  email: string;
+  state: "PENDING" | "VERIFIED";
+  serverTime: string;
+  codeExpiresAt: string | null;
+  resendAvailableAt: string;
+  attemptsRemaining: number;
+  deliveryStatus: "NONE" | "SENT" | "FAILED" | "RATE_LIMITED";
+}
+
+export function isPendingRegistration(value: AuthUser | PendingRegistration): value is PendingRegistration {
+  return "state" in value;
 }
 
 interface LoginInput {
@@ -23,7 +38,7 @@ interface CsrfToken {
   token: string;
 }
 
-type RegistrationErrors = Partial<Record<"email", string>>;
+type RegistrationErrors = Partial<Record<"email" | "displayName", string>>;
 
 const sessionExpiredEvent = "super-pont:session-expired";
 let sessionVersion = 0;
@@ -45,6 +60,8 @@ class AuthError extends Error {
     readonly status: number,
     readonly fieldErrors: RegistrationErrors,
     readonly retryAfter: number,
+    readonly code?: string,
+    readonly attemptsRemaining?: number,
   ) {
     super(`Authentication request failed (${status})`);
   }
@@ -71,14 +88,14 @@ export async function sessionFetch(path: string, init: RequestInit = {}) {
 async function request(path: string, init: RequestInit = {}) {
   const response = await sessionFetch(path, init);
   if (!response.ok) {
-    const problem = path === "/auth/register" && response.status === 409
-      ? await response.json().catch(() => null)
-      : null;
+    const problem = await response.json().catch(() => null);
     const fieldErrors: RegistrationErrors = {};
     if (typeof problem?.errors?.email === "string") {
       fieldErrors.email = "Această adresă de e-mail este deja înregistrată.";
     }
-    throw new AuthError(response.status, fieldErrors, Number(response.headers.get("Retry-After")));
+    if (typeof problem?.errors?.displayName === "string") fieldErrors.displayName = displayNameTakenMessage;
+    throw new AuthError(response.status, fieldErrors, Number(response.headers.get("Retry-After")),
+      problem?.code, problem?.attemptsRemaining);
   }
   return response;
 }
@@ -89,7 +106,7 @@ export async function csrfHeaders(signal?: AbortSignal) {
   return new Headers({ [headerName]: token });
 }
 
-async function submit(path: string, body?: LoginInput | RegistrationInput) {
+async function submit(path: string, body?: object) {
   const headers = await csrfHeaders();
   if (body) headers.set("Content-Type", "application/json");
   return request(path, {
@@ -108,14 +125,49 @@ export async function getCurrentUser(signal: AbortSignal): Promise<AuthUser | nu
   }
 }
 
-export async function register(input: RegistrationInput): Promise<AuthUser> {
+export async function register(input: RegistrationInput): Promise<PendingRegistration> {
   return (await submit("/auth/register", { ...input, displayName: input.displayName.trim(), email: normalizeEmail(input.email) })).json();
 }
 
-export async function login(input: LoginInput): Promise<AuthUser> {
+export async function login(input: LoginInput): Promise<AuthUser | PendingRegistration> {
   const response = await submit("/auth/login", { ...input, email: normalizeEmail(input.email) });
-  sessionVersion++;
+  if (response.status !== 202) sessionVersion++;
   return response.json();
+}
+
+export async function getPendingRegistration(signal: AbortSignal): Promise<PendingRegistration> {
+  return (await request("/auth/registration", { signal, cache: "no-store" })).json();
+}
+
+export async function confirmRegistration(code: string): Promise<PendingRegistration> {
+  return (await submit("/auth/registration/confirm", { code })).json();
+}
+
+export async function resendRegistrationCode(): Promise<PendingRegistration> {
+  return (await submit("/auth/registration/resend")).json();
+}
+
+export async function correctRegistrationEmail(email: string): Promise<PendingRegistration> {
+  return (await submit("/auth/registration/email", { email: normalizeEmail(email) })).json();
+}
+
+export function verificationFailure(error: unknown) {
+  const auth = error instanceof AuthError ? error : undefined;
+  const messages: Record<string, string> = {
+    INCORRECT_CODE: "Codul este incorect. Verifică mesajul primit și încearcă din nou.",
+    CODE_EXPIRED: "Codul a expirat. Solicită un cod nou.",
+    CODE_ATTEMPTS_EXHAUSTED: "Ai epuizat cele 5 încercări. Solicită un cod nou.",
+    REGISTRATION_EXPIRED: "Sesiunea de confirmare a expirat. Autentifică-te cu adresa de email și parola pentru a continua.",
+  };
+  return {
+    message: auth?.code && messages[auth.code] ? messages[auth.code]
+      : auth?.status === 401 ? messages.REGISTRATION_EXPIRED
+      : auth?.status === 409 ? "Această adresă de email este deja înregistrată. Alege alta."
+      : authErrorMessage(error),
+    retryAfter: auth?.retryAfter ?? 0,
+    attemptsRemaining: auth?.attemptsRemaining,
+    sessionExpired: auth?.status === 401,
+  };
 }
 
 export async function logout(): Promise<void> {

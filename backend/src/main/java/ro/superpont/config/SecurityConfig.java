@@ -60,15 +60,20 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.HEAD, "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/password-reset/request",
+                                "/api/auth/password-reset/validate", "/api/auth/password-reset/confirm").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/registration").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/registration/confirm",
+                                "/api/auth/registration/resend", "/api/auth/registration/email").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/users/me", "/api/predictions/me").authenticated()
                         .requestMatchers(HttpMethod.HEAD, "/api/predictions/me").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/users/me/settings").authenticated()
                         .requestMatchers(HttpMethod.HEAD, "/api/users/me/settings").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/users/me/settings").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/users/me/profile", "/api/users/me/password").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/leaderboard/superliga",
+                        .requestMatchers(HttpMethod.GET, "/api/leaderboard", "/api/leaderboard/users/{userId}/predictions", "/api/leaderboard/superliga",
                                 "/api/leaderboard/superliga/users/{userId}/predictions").authenticated()
-                        .requestMatchers(HttpMethod.HEAD, "/api/leaderboard/superliga",
+                        .requestMatchers(HttpMethod.HEAD, "/api/leaderboard", "/api/leaderboard/users/{userId}/predictions", "/api/leaderboard/superliga",
                                 "/api/leaderboard/superliga/users/{userId}/predictions").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/matches/{matchId}/prediction").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/matches/{matchId}/prediction").authenticated()

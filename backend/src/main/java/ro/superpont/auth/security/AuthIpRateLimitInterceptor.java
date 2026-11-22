@@ -18,8 +18,14 @@ public final class AuthIpRateLimitInterceptor implements HandlerInterceptor {
             // Tomcat resolves the peer address and applies the explicit proxy allowlist.
             if ("/api/auth/login".equals(request.getServletPath())) {
                 limiter.checkLoginIp(request.getRemoteAddr());
-            } else {
+            } else if ("/api/auth/register".equals(request.getServletPath())) {
                 limiter.checkRegistrationIp(request.getRemoteAddr());
+            } else if ("/api/auth/password-reset/request".equals(request.getServletPath())) {
+                limiter.checkPasswordResetIp(request.getRemoteAddr());
+            } else if (request.getServletPath().startsWith("/api/auth/password-reset/")) {
+                limiter.checkPasswordResetSubmissionIp(request.getRemoteAddr());
+            } else {
+                limiter.checkVerificationIp(request.getRemoteAddr());
             }
         }
         return true;

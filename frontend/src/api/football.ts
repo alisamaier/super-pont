@@ -2,6 +2,7 @@ import { apiUrl } from "../config";
 import { sessionFetch, SessionExpiredError } from "./auth";
 import { isUuid } from "../lib/uuid";
 import { invalidResponse, isRecord, readPage, readPages } from "./page";
+import type { LeaderboardScope } from "../lib/leaderboard";
 import {
   matchStatuses,
   type CompetitionView,
@@ -148,8 +149,9 @@ export const footballApi = {
   },
   matches: (roundId: string, signal: AbortSignal) =>
     list("/matches", { roundId }, isMatch, signal),
-  async leaderboard(page: number, signal: AbortSignal) {
-    const response = await getJson(`/leaderboard/superliga?page=${page}&size=20`, signal,
+  async leaderboard(page: number, signal: AbortSignal, scope?: LeaderboardScope) {
+    const query = new URLSearchParams({ page: String(page), size: "20", ...scope });
+    const response = await getJson(`/leaderboard${scope ? "" : "/superliga"}?${query}`, signal,
       { credentials: "include", cache: "no-store" });
     return readPage(response, page, isLeaderboardRow);
   },

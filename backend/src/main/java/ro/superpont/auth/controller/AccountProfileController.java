@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import java.security.Principal;
 import java.util.UUID;
 import org.springframework.http.CacheControl;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.web.authentication.logout.CookieClearingLogoutHandler;
@@ -14,10 +15,12 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import ro.superpont.auth.dto.PasswordChangeRequest;
 import ro.superpont.auth.dto.ProfileRequest;
 import ro.superpont.auth.dto.UserView;
 import ro.superpont.auth.service.AccountSettingsService;
+import ro.superpont.auth.service.AccountConflictException;
 
 @RestController
 @RequestMapping("/api/users/me")
@@ -26,6 +29,13 @@ public class AccountProfileController {
 
     public AccountProfileController(AccountSettingsService settings) {
         this.settings = settings;
+    }
+
+    @ExceptionHandler(AccountConflictException.class)
+    public ProblemDetail conflict(AccountConflictException exception) {
+        var problem = ProblemDetail.forStatusAndDetail(exception.getStatus(), exception.getMessage());
+        problem.setProperty("errors", exception.getErrors());
+        return problem;
     }
 
     @PutMapping("/profile")

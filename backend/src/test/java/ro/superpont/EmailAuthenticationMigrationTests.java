@@ -34,7 +34,7 @@ class EmailAuthenticationMigrationTests {
                                 '10000000-0000-0000-0000-000000000040', 2, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                         """);
                 Flyway.configure().dataSource(source).locations("classpath:db/migration").load().migrate();
-                try (var rows = statement.executeQuery("SELECT id, email, display_name, password_hash, password_version, hide_predictions_until_kickoff FROM users")) {
+                try (var rows = statement.executeQuery("SELECT id, email, display_name, password_hash, password_version, hide_predictions_until_kickoff, email_verified FROM users")) {
                     assertThat(rows.next()).isTrue();
                     assertThat(rows.getString("id")).isEqualTo("30000000-0000-0000-0000-000000000001");
                     assertThat(rows.getString("email")).isEqualTo("legacy@example.test");
@@ -42,6 +42,7 @@ class EmailAuthenticationMigrationTests {
                     assertThat(rows.getString("password_hash")).isEqualTo("unchanged-password-hash");
                     assertThat(rows.getLong("password_version")).isEqualTo(1);
                     assertThat(rows.getBoolean("hide_predictions_until_kickoff")).isTrue();
+                    assertThat(rows.getBoolean("email_verified")).isTrue();
                 }
                 try (var rows = statement.executeQuery("SELECT home_score, away_score FROM predictions WHERE user_id = '30000000-0000-0000-0000-000000000001'")) {
                     assertThat(rows.next()).isTrue();
@@ -55,8 +56,12 @@ class EmailAuthenticationMigrationTests {
                         """)).isInstanceOf(SQLException.class);
                 statement.executeUpdate("""
                         INSERT INTO users (id, display_name, email, password_hash, role, created_at)
-                        VALUES (RANDOM_UUID(), 'legacy_public_name', 'different@example.test', 'hash', 'USER', CURRENT_TIMESTAMP)
+                        VALUES (RANDOM_UUID(), 'Another public name', 'different@example.test', 'hash', 'USER', CURRENT_TIMESTAMP)
                         """);
+                try (var rows = statement.executeQuery("SELECT email_verified FROM users WHERE email = 'different@example.test'")) {
+                    assertThat(rows.next()).isTrue();
+                    assertThat(rows.getBoolean(1)).isFalse();
+                }
             }
         }
     }

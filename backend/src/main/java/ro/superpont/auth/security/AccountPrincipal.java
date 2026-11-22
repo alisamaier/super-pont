@@ -11,7 +11,7 @@ public final class AccountPrincipal extends org.springframework.security.core.us
     private final long passwordVersion;
 
     public AccountPrincipal(User user) {
-        super(user.getId().toString(), user.getPasswordHash(),
+        super(user.getId().toString(), user.getPasswordHash(), user.isEmailVerified(), true, true, true,
                 List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())));
         this.passwordVersion = user.getPasswordVersion();
         this.accountId = user.getId();

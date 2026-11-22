@@ -30,43 +30,36 @@ export function RulesPage({ hash }: { hash: string }) {
 
       <section className="rules-section" aria-labelledby="participare-title">
         <h2 id="participare-title">Cum participi</h2>
-        <p>Creează-ți un cont, intră în cont și alege o competiție. Selectează etapa, completează scorurile pe care le anticipezi și salvează pronosticurile.</p>
-        <p>Pentru fiecare echipă poți introduce un număr întreg între <strong>0 și 99</strong>, inclusiv. Completează ambele scoruri. Pronosticul contează doar după ce a fost salvat cu succes; simpla completare a câmpurilor nu îl salvează.</p>
+        <p>Creează-ți un cont, confirmă adresa de email și autentifică-te. Alege competiția și etapa, completează ambele scoruri și salvează pronosticul.</p>
+        <p>Introdu pentru fiecare echipă un număr întreg între <strong>0 și 99</strong>, inclusiv. Pronosticul contează doar după salvarea cu succes.</p>
       </section>
 
       <section className="rules-section" aria-labelledby="termen-title">
         <h2 id="termen-title">Până când poți modifica pronosticul</h2>
-        <p>Poți salva, modifica sau șterge un pronostic până la ora de începere programată pentru meci în aplicație. Din acel moment, pronosticul este blocat.</p>
-        <p>Termenul este verificat de server la fiecare salvare, modificare sau ștergere, după ceasul serverului. Orele meciurilor sunt afișate în fusul tău orar local.</p>
+        <p>Poți salva, modifica sau șterge un pronostic până la ora de start afișată în aplicație. Din acel moment, pronosticul este blocat. Orele sunt afișate în fusul tău orar local.</p>
       </section>
 
       <section className="rules-section" aria-labelledby="vizibilitate-title">
-        <h2 id="vizibilitate-title">Când vezi pronosticurile celorlalți</h2>
-        <p>Pentru a consulta clasamentul și pronosticurile altor utilizatori, trebuie să fii conectat la cont.</p>
-        <p>Fiecare utilizator alege dacă își ascunde pronosticurile înainte de start. Opțiunea „Ascunde pronosticurile mele până la start” se găsește în „Setările contului”, din meniul contului, și este <strong>dezactivată implicit pentru conturile noi</strong>. Conturile existente își păstrează opțiunea salvată.</p>
-        <p>Când opțiunea este activată, ceilalți văd scorul pronosticat din momentul în care se atinge ora de începere programată a fiecărui meci. Când este dezactivată, scorul devine vizibil imediat după salvare. Schimbarea opțiunii se aplică atât pronosticurilor deja salvate, cât și celor viitoare.</p>
-        <p>După termenul-limită al meciului, pronosticurile sunt vizibile indiferent de opțiunea aleasă. Preferința de vizibilitate nu schimbă termenul până la care poți modifica un pronostic.</p>
-        <p>Vizibilitatea se stabilește separat pentru fiecare meci. Îți poți vedea propriile pronosticuri salvate oricând ești conectat.</p>
+        <h2 id="vizibilitate-title">Cine îți poate vedea pronosticurile</h2>
+        <p>Pronosticurile tale sunt vizibile celorlalți utilizatori autentificați imediat după salvare.</p>
+        <p>Dacă preferi să le păstrezi ascunse până la începerea meciurilor, activează <strong>„Ascunde pronosticurile mele până la start”</strong> din <strong>Setările contului</strong>. Fiecare pronostic devine vizibil la ora de start a meciului respectiv.</p>
+        <p>Setarea se aplică și pronosticurilor deja salvate. Tu le poți vedea oricând.</p>
       </section>
 
       <section id="punctaj" className="rules-section rules-scoring" tabIndex={-1} aria-labelledby="punctaj-title">
         <h2 id="punctaj-title">Cum primești puncte</h2>
         <p>Pentru fiecare pronostic salvat poți primi între <strong>0 și 10 puncte</strong>, în două părți:</p>
         <ul>
-          <li><strong>5 puncte pentru rezultat:</strong> ai anticipat corect victoria gazdelor, egalul sau victoria oaspeților. Dacă ai greșit rezultatul, primești 0 puncte pentru această parte.</li>
+          <li><strong>5 puncte pentru rezultat:</strong> ai anticipat corect victoria gazdelor, egalul sau victoria oaspeților; altfel, 0 puncte.</li>
           <li><strong>Până la 5 puncte bonus pentru precizia scorului</strong>, chiar dacă ai greșit rezultatul.</li>
         </ul>
         <p>Pornești de la 5 puncte bonus și pierzi câte un punct pentru fiecare gol cu care ai greșit, calculat separat pentru fiecare echipă. Bonusul scade până la minimum 0.</p>
-        <div className="rules-formula">
-          <p><strong>Eroare totală</strong> = |goluri pronosticate gazde − goluri finale gazde| + |goluri pronosticate oaspeți − goluri finale oaspeți|</p>
-          <p><strong>Bonus de precizie</strong> = max(0, 5 − eroarea totală)</p>
-          <p><strong>Total puncte</strong> = puncte pentru rezultat + bonus de precizie</p>
-        </div>
-        <p>Un <strong>scor exact aduce 10 puncte</strong>: 5 pentru rezultat și 5 bonus. Punctele se acordă doar când meciul este marcat ca încheiat și are scor final. Scorul unui meci în desfășurare nu aduce încă puncte.</p>
+        <p>Un <strong>scor exact aduce 10 puncte</strong>. Punctele se acordă doar pentru meciurile încheiate, cu scor final.</p>
 
-        <div className="rules-table-wrap" role="region" aria-label="Exemple de punctaj" tabIndex={0}>
-          <table className="rules-table">
-            <caption>Exemple de calcul · scorurile sunt în ordinea gazde–oaspeți</caption>
+        <h3 id="exemple-title">Exemple de calcul</h3>
+        <p id="exemple-ordine" className="rules-table-note">Scorurile sunt în ordinea gazde–oaspeți</p>
+        <div className="rules-table-wrap" role="region" aria-labelledby="exemple-title" tabIndex={0}>
+          <table className="rules-table" aria-labelledby="exemple-title" aria-describedby="exemple-ordine">
             <thead>
               <tr>
                 <th scope="col">Scor final</th>
@@ -90,15 +83,15 @@ export function RulesPage({ hash }: { hash: string }) {
 
       <section className="rules-section" aria-labelledby="clasament-title">
         <h2 id="clasament-title">Clasamentul</h2>
-        <p>Punctele se adună pentru sezonul curent al competiției, separat de alte sezoane sau competiții. În prezent, pagina „Clasament” afișează doar <strong>SuperLiga, sezonul curent</strong>.</p>
-        <p>În clasamentul sezonului curent apar toți utilizatorii, începând cu <strong>0 puncte</strong>, chiar dacă nu au salvat încă pronosticuri sau meciurile lor nu s-au încheiat. La egalitate de puncte, utilizatorii împart același loc, iar următoarea poziție ține cont de numărul lor: de exemplu, <strong>1, 2, 2, 4</strong>.</p>
+        <p>Clasamentul adună punctele din sezonul curent al competiției selectate. Apar toți utilizatorii, inclusiv cei fără pronosticuri sau cu <strong>0 puncte</strong>.</p>
+        <p>Utilizatorii cu același număr de puncte ocupă același loc. De exemplu, dacă doi utilizatori împart locul 2, următorul ocupă locul 4, deoarece trei utilizatori sunt înaintea lui.</p>
       </section>
 
       <section className="rules-section" aria-labelledby="rezultate-title">
         <h2 id="rezultate-title">Rezultate și situații speciale</h2>
-        <p>Dacă un scor final este corectat în aplicație, punctele pronosticurilor și clasamentul sunt recalculate pe baza noului scor. Vezi valorile actualizate la reîncărcarea datelor.</p>
-        <p>Meciurile marcate ca amânate sau anulate nu aduc puncte cât timp au acest statut. Pronosticurile salvate se păstrează. Dacă meciul este ulterior marcat ca încheiat și primește un scor final, punctajul se calculează după formula de mai sus.</p>
-        <p>Schimbarea statutului unui meci nu modifică automat termenul de salvare sau vizibilitatea pronosticurilor: acestea depind în continuare de ora de începere programată în aplicație.</p>
+        <p>Dacă rezultatul final este corectat, punctele pronosticurilor și clasamentul se actualizează.</p>
+        <p>Meciurile amânate sau anulate nu aduc puncte cât timp au acest statut. Pronosticurile salvate se păstrează.</p>
+        <p>Termenul de modificare și vizibilitatea pronosticurilor urmează ora de start afișată, inclusiv pentru meciurile amânate.</p>
       </section>
     </main>
   );

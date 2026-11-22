@@ -2,6 +2,7 @@ import { isUuid } from "../lib/uuid";
 import { getJson } from "./football";
 import { invalidResponse, isRecord, readPage } from "./page";
 import { matchStatuses, type MatchStatus, type PageView } from "./types";
+import type { LeaderboardScope } from "../lib/leaderboard";
 
 interface PublicMatch {
   matchId: string;
@@ -64,9 +65,10 @@ function isPublicPrediction(value: unknown): value is PublicPrediction {
   );
 }
 
-export async function getPublicPredictions(userId: string, page: number, signal: AbortSignal): Promise<PublicUserPredictions> {
+export async function getPublicPredictions(userId: string, page: number, signal: AbortSignal, scope?: LeaderboardScope): Promise<PublicUserPredictions> {
+  const query = new URLSearchParams({ page: String(page), size: "20", ...scope });
   const data = await getJson(
-    `/leaderboard/superliga/users/${encodeURIComponent(userId)}/predictions?page=${page}&size=20`, signal,
+    `/leaderboard${scope ? "" : "/superliga"}/users/${encodeURIComponent(userId)}/predictions?${query}`, signal,
     { credentials: "include", cache: "no-store" },
   );
   if (

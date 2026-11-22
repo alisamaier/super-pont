@@ -67,8 +67,9 @@ class AccountProfileApiTests {
             assertThat(owner.request("POST", "/auth/logout", null, owner.csrf()).statusCode()).isEqualTo(204);
             login(owner, "demo_ana@leaderboard.example.test", OLD_PASSWORD, 200);
             assertThat(get(owner, "/users/me").get("displayName").asText()).isEqualTo("Ana Ștefan");
-            // The existing schema permits duplicate display names; email addresses remain unique.
-            assertThat(owner.request("PUT", "/users/me/profile", Map.of("displayName", "Radu"), owner.csrf()).statusCode()).isEqualTo(200);
+            var taken = owner.request("PUT", "/users/me/profile", Map.of("displayName", " RAdU "), owner.csrf());
+            assertThat(taken.statusCode()).isEqualTo(409);
+            assertThat(json.readTree(taken.body()).at("/errors/displayName").asText()).isEqualTo("Display name is already registered");
         }
     }
 

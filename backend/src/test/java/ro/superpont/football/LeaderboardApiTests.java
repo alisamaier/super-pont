@@ -49,9 +49,12 @@ class LeaderboardApiTests {
     @Autowired PasswordEncoder passwords;
     @MockitoBean Clock clock;
     @MockitoBean AuthRateLimiter rateLimiter;
+    @MockitoBean ro.superpont.auth.service.VerificationEmailSender verificationEmail;
 
     @BeforeEach
     void resetResult() {
+        // Keep the small scoring fixtures isolated; the pagination test loads all 45 accounts explicitly.
+        removePaginationDemo();
         when(clock.instant()).thenReturn(Instant.parse("2026-11-17T12:00:00Z"));
         jdbc.update("UPDATE football_matches SET home_score = 5, away_score = 0 WHERE id = ?", UUID.fromString(FIRST_MATCH));
     }
@@ -87,8 +90,8 @@ class LeaderboardApiTests {
 
             String adminPassword = "local-test-admin";
             jdbc.update("""
-                    INSERT INTO users (id, display_name, email, password_hash, role, created_at)
-                    VALUES (?, 'leaderboard_admin', 'leaderboard_admin@example.test', ?, 'ADMIN', CURRENT_TIMESTAMP)
+                    INSERT INTO users (id, display_name, email, password_hash, role, created_at, email_verified)
+                    VALUES (?, 'leaderboard_admin', 'leaderboard_admin@example.test', ?, 'ADMIN', CURRENT_TIMESTAMP, TRUE)
                     """, adminId, passwords.encode(adminPassword));
             login(admin, "leaderboard_admin", adminPassword);
             var correction = admin.request("PUT", "/matches/" + FIRST_MATCH + "/result",
@@ -99,6 +102,7 @@ class LeaderboardApiTests {
             var sql = seed.getContentAsString(UTF_8).replace("${leaderboardDemo}", "true");
             new ResourceDatabasePopulator(new ByteArrayResource(sql.getBytes(UTF_8)))
                     .execute(flyway.getConfiguration().getDataSource());
+            removePaginationDemo();
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM predictions", Long.class)).isEqualTo(19);
             assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users", Long.class)).isEqualTo(7);
 
@@ -120,6 +124,54 @@ class LeaderboardApiTests {
     }
 
     @Test
+    void paginatesDatabaseRanksAcrossTwentyUserBoundariesAndRepeatsTheSeed() throws Exception {
+        var sql = new ClassPathResource("db/devdata/R__superliga_leaderboard_demo.sql")
+                .getContentAsString(UTF_8).replace("${leaderboardDemo}", "true");
+        var seed = new ResourceDatabasePopulator(new ByteArrayResource(sql.getBytes(UTF_8)));
+        seed.execute(flyway.getConfiguration().getDataSource());
+        seed.execute(flyway.getConfiguration().getDataSource());
+        try (var viewer = new TestHttpSession(port, json)) {
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users", Long.class)).isEqualTo(45);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE email_verified = TRUE", Long.class)).isEqualTo(45);
+            assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM predictions", Long.class)).isEqualTo(58);
+            assertThat(jdbc.queryForObject("""
+                    SELECT COUNT(DISTINCT p.user_id) FROM predictions p
+                    JOIN football_matches m ON m.id = p.match_id WHERE m.status = 'FINISHED'
+                    """, Long.class)).isEqualTo(45);
+            login(viewer, "demo_radu@leaderboard.example.test", "SuperPontDemo2026!");
+            var first = get(viewer, LEADERBOARD);
+            var second = get(viewer, LEADERBOARD + "?page=1");
+            var last = get(viewer, LEADERBOARD + "?page=2");
+            assertThat(first.get("page").asInt()).isZero();
+            assertThat(first.get("size").asInt()).isEqualTo(20);
+            assertThat(first.get("totalElements").asInt()).isEqualTo(45);
+            assertThat(first.get("totalPages").asInt()).isEqualTo(3);
+            assertThat(first.get("items").size()).isEqualTo(20);
+            assertThat(second.get("items").size()).isEqualTo(20);
+            assertThat(last.get("items").size()).isEqualTo(5);
+            assertThat(standing(first.at("/items/19"))).isEqualTo(tuple(6, "Participant 15", 1));
+            assertThat(standing(second.at("/items/0"))).isEqualTo(tuple(6, "Participant 16", 1));
+            assertThat(standing(last.at("/items/4"))).isEqualTo(tuple(45, "Vlad", 0));
+            assertThat(get(viewer, LEADERBOARD + "?page=3").get("items").isEmpty()).isTrue();
+            assertThat(get(viewer, LEADERBOARD + "?page=2147483647").get("totalPages").asInt()).isEqualTo(3);
+            assertThat(get(viewer, LEADERBOARD + "?size=100").get("items").size()).isEqualTo(45);
+            for (var query : java.util.List.of("page=-1", "page=abc", "page=2147483648", "size=0", "size=-1", "size=101")) {
+                assertThat(viewer.request("GET", LEADERBOARD + "?" + query, null, null).statusCode()).isEqualTo(400);
+            }
+
+            // Equal point totals retain a deterministic order on repeated reads.
+            assertThat(get(viewer, LEADERBOARD + "?page=1").get("items")).isEqualTo(second.get("items"));
+        } finally {
+            removePaginationDemo();
+        }
+    }
+
+    private void removePaginationDemo() {
+        jdbc.update("DELETE FROM predictions WHERE user_id IN (SELECT id FROM users WHERE CAST(id AS VARCHAR) LIKE '30000000-%')");
+        jdbc.update("DELETE FROM users WHERE CAST(id AS VARCHAR) LIKE '30000000-%'");
+    }
+
+    @Test
     void includesAllAccountsBeforeAnyResultsAndNewRegistrationsWithoutEvaluatedPredictions() throws Exception {
         UUID newUserId = null;
         jdbc.update("""
@@ -136,15 +188,16 @@ class LeaderboardApiTests {
                     .extracting(this::standing).containsExactly(tuple(1, "Demo public", 0), tuple(1, "Mara", 0));
 
             var registration = newUser.request("POST", "/auth/register",
-                    Map.of("displayName", "Ana", "email", "new-ranking@example.test", "password", "new-ranking-password"), newUser.csrf());
+                    Map.of("displayName", "Ana noua", "email", "new-ranking@example.test", "password", "new-ranking-password"), newUser.csrf());
             assertThat(registration.statusCode()).as(registration.body()).isEqualTo(200);
             newUserId = UUID.fromString(json.readTree(registration.body()).get("id").asText());
+            jdbc.update("UPDATE users SET email_verified = TRUE WHERE id = ?", newUserId);
             var registered = get(viewer, LEADERBOARD);
             assertThat(registered.get("totalElements").asInt()).isEqualTo(7);
             String newId = newUserId.toString();
             assertThat(registered.get("items")).anySatisfy(row -> {
                 assertThat(row.get("userId").asText()).isEqualTo(newId);
-                assertThat(standing(row)).isEqualTo(tuple(1, "Ana", 0));
+                assertThat(standing(row)).isEqualTo(tuple(1, "Ana noua", 0));
             });
             assertThat(registered.toString()).doesNotContain("email", "password");
             var empty = get(viewer, publicPath(newId));
@@ -160,7 +213,7 @@ class LeaderboardApiTests {
             assertThat(get(viewer, LEADERBOARD).get("items")).anySatisfy(row -> {
                 assertThat(row.get("userId").asText()).isEqualTo(newId);
                 // Three users now have positive totals; all remaining users share fourth place.
-                assertThat(standing(row)).isEqualTo(tuple(4, "Ana", 0));
+                assertThat(standing(row)).isEqualTo(tuple(4, "Ana noua", 0));
             });
         } finally {
             if (newUserId != null) {
@@ -275,10 +328,19 @@ class LeaderboardApiTests {
                     .containsExactly(18, 17, 17, 17);
             assertThat(ticket.toString()).doesNotContain(otherMatch.toString(), HISTORICAL_MATCH);
 
+            String scope = "?competitionId=" + otherCompetition + "&seasonId=" + otherSeason;
+            var selected = get(session, "/leaderboard" + scope);
+            assertThat(standing(selected.at("/items/0"))).isEqualTo(tuple(1, "Ana", 10));
+            assertThat(selected.get("totalElements").asInt()).isEqualTo(6);
+            assertThat(get(session, "/leaderboard/users/" + ANA + "/predictions" + scope)
+                    .at("/predictions/items/0/matchId").asText()).isEqualTo(otherMatch.toString());
+            assertThat(session.request("GET", "/leaderboard?competitionId=" + otherCompetition
+                    + "&seasonId=10000000-0000-0000-0000-000000000003", null, null).statusCode()).isEqualTo(404);
+
             UUID emptyUser = UUID.randomUUID();
             jdbc.update("""
-                    INSERT INTO users (id, display_name, email, password_hash, role, created_at)
-                    VALUES (?, 'empty_leaderboard_user', 'empty@example.test', ?, 'USER', CURRENT_TIMESTAMP)
+                    INSERT INTO users (id, display_name, email, password_hash, role, created_at, email_verified)
+                    VALUES (?, 'empty_leaderboard_user', 'empty@example.test', ?, 'USER', CURRENT_TIMESTAMP, TRUE)
                     """, emptyUser, passwords.encode("empty-password"));
             try {
                 var empty = get(session, publicPath(emptyUser.toString()));
@@ -320,7 +382,9 @@ class LeaderboardApiTests {
     void leaderboardAndOtherUserPredictionsRequireASessionIncludingAfterLogout() throws Exception {
         try (var session = new TestHttpSession(port, json)) {
             for (String method : java.util.List.of("GET", "HEAD")) {
-                for (String path : java.util.List.of(LEADERBOARD, publicPath(ANA))) {
+                for (String path : java.util.List.of(LEADERBOARD, publicPath(ANA),
+                        "/leaderboard?competitionId=10000000-0000-0000-0000-000000000002&seasonId=10000000-0000-0000-0000-000000000003",
+                        "/leaderboard/users/" + ANA + "/predictions?competitionId=10000000-0000-0000-0000-000000000002&seasonId=10000000-0000-0000-0000-000000000003")) {
                     var response = session.request(method, path, null, null);
                     assertThat(response.statusCode()).as(method + " " + path).isEqualTo(401);
                     assertThat(response.headers().firstValue("Cache-Control"))

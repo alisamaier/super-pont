@@ -9,4 +9,6 @@ export function displayNameError(value: string): string {
   return value.trim().length > 64 ? "Numele poate avea cel mult 64 de caractere." : "";
 }
 
+export const displayNameTakenMessage = "Acest nume este deja folosit. Alege altul.";
+
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();

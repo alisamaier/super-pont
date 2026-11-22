@@ -53,8 +53,15 @@ database; use separate development and production databases.
 | Method and path | Input and response |
 | --- | --- |
 | `GET /api/auth/csrf` | Starts or reuses a session and returns `headerName` and `token` (plus `parameterName`). |
-| `POST /api/auth/register` | JSON `displayName`, `email`, `password`. Returns `200` and a profile. Sign in separately. |
-| `POST /api/auth/login` | JSON `email`, `password`. Returns `200` and a profile, and rotates the session ID. |
+| `POST /api/auth/register` | JSON `displayName`, `email`, `password`. Returns `200` and pending verification state; sets the limited registration cookie. |
+| `POST /api/auth/login` | JSON `email`, `password`. Verified: `200`, profile, and rotated session ID. Unverified with correct credentials: `202` and resumed verification state, without an authenticated session. |
+| `GET /api/auth/registration` | Resume status through the registration cookie. Missing/expired token: `401`. |
+| `POST /api/auth/registration/confirm` | JSON `code` (six ASCII digits as a string, including leading zeros). Confirms the account; returns `200`. |
+| `POST /api/auth/registration/resend` | Issues and emails a replacement code; returns `200` and updated pending state. |
+| `POST /api/auth/registration/email` | JSON `email`. Corrects a pending email after uniqueness validation, replaces the code and sends it; returns `200`. |
+| `POST /api/auth/password-reset/request` | JSON `email`, normalized as login. Public with CSRF. Always `200` with the same Romanian `message` for known/unknown accounts and SMTP failures; rate limits return `429` and `Retry-After`. |
+| `POST /api/auth/password-reset/validate` | JSON `token`. Public with CSRF. `204` for a currently usable link; `400` with `Linkul este invalid sau a expirat. Solicită un link nou.` for an invalid, expired, or used link. Does not consume it. |
+| `POST /api/auth/password-reset/confirm` | JSON `token`, `newPassword`. Public with CSRF. Same password rules as registration. `204` consumes all account reset links, revokes sessions, and clears the current session; invalid links return `400`. Requires a new login. |
 | `POST /api/auth/logout` | Invalidates the session and returns `204`. |
 | `GET /api/users/me` | Returns the signed-in profile, or `401`. |
 | `GET /api/users/me/settings` | Returns the saved `hidePredictionsUntilKickoff` boolean for the signed-in account, or `401`. |
@@ -62,12 +69,68 @@ database; use separate development and production databases.
 | `PUT /api/users/me/profile` | JSON `displayName`. Session and CSRF required; returns `200` and the updated profile. |
 | `PUT /api/users/me/password` | JSON `currentPassword`, `newPassword`. Session and CSRF required; returns `204`, clears the current session cookie, and revokes all previous sessions. |
 
+Password-reset links expire after 30 minutes and carry 256-bit random tokens in
+the frontend URL fragment. Flyway V11 stores only SHA-256 hashes, account UUIDs,
+expiry, and consumption timestamps. Issuance and reset lock the account row first;
+simultaneous uses of the same or different links have one winner. A new request
+does not invalidate previous links. Failed SMTP delivery consumes only that
+failed delivery's token and allows retry; account data and earlier links survive.
+Reset never changes email verification. `User.changePassword` increments the
+persisted version checked by `SessionVersionFilter`, revoking sessions across app
+instances. See [local recovery and configuration](../README.md#local-password-recovery).
+
 Own-account profiles contain `id`, `displayName`, `email`, `role`, and `createdAt`.
+Pending verification responses contain `id`, `email`, `state` (`PENDING` or
+`VERIFIED`), `serverTime`, `codeExpiresAt`, `resendAvailableAt`, `attemptsRemaining`,
+and `deliveryStatus` (`SENT`, `FAILED`, `NONE`, or `RATE_LIMITED`). No code or token
+is returned in JSON. SMTP failures return recoverable pending state rather than
+rolling back the account. `codeExpiresAt` is null when delivery failed.
+
+`SP_REGISTRATION` is a 256-bit random HttpOnly cookie, scoped to
+`/api/auth/registration`, valid for 24 hours. It uses the session cookie's Secure
+and SameSite configuration. Only its SHA-256 hash is stored. It grants no normal
+account access. Correct-credential login rotates it without resetting the code,
+cooldown, attempts, or hourly send counter. CSRF is required on every write,
+including confirmation, resend and email correction.
+
+Codes are cryptographically random, salted BCrypt hashes at rest, expire after
+10 minutes, and allow five incorrect attempts. Incorrect codes return `400`
+with `code: INCORRECT_CODE` and `attemptsRemaining`; the fifth failure returns
+`CODE_ATTEMPTS_EXHAUSTED`, and subsequent attempts return `409` until a new code
+is issued. Expired/unavailable codes return `410` with `CODE_EXPIRED`. A successful
+confirmation clears the code; retries with the same authorized registration token
+return `200`/`VERIFIED` without authenticating. All mutations serialize on the
+account's database row, so concurrent resends and confirmations agree on which
+code is current. Email corrections flush uniqueness before delivering a message.
+
+Flyway V9 marks all existing accounts legacy verified and changes the database
+default to unverified for new accounts. Development demo inserts explicitly set
+verified status. The authentication provider and session revocation filter both
+require verified email. See the root [Mailpit and SMTP setup](../README.md#local-email-verification-with-mailpit).
 Registration and profile updates strip surrounding whitespace and require a
-nonblank public name of at most 64 characters. Names are not unique. The Romanian
+nonblank public name of at most 64 characters. Names are unique after trimming
+surrounding whitespace and comparing case-insensitively. The Romanian
 UI labels this field **Nume**; changing it does not change the login email.
 Ownership and navigation use stable account UUIDs. Leaderboard and other-user
 prediction responses contain public names and UUIDs, never email addresses.
+
+Registration and profile name conflicts return `409` with
+`errors.displayName: "Display name is already registered"`. Both forms display
+**Acest nume este deja folosit. Alege altul.** next to **Nume**. A user can retain
+their own name or change only its capitalization. Login continues to use email.
+
+Flyway V10 reserves all existing normalized names, keeps the oldest account's name
+in each duplicate group (UUID breaks creation-time ties), and gives the others
+available numeric suffixes starting at `2`. Long bases are shortened to keep the
+64-character limit; existing names such as `Alisa 2` are not taken away from their
+owners. Surrounding whitespace is normalized. Only `display_name` changes;
+account IDs, credentials, predictions, points and preferences remain intact.
+Every changed name is recorded in `account_name_migration_audit`
+(`user_id`, `previous_name`, `new_name`, `changed_at`). PostgreSQL holds an exclusive
+user-table lock while repairing names and installing the generated
+`display_name_key` unique constraint in the same transaction. The generated key
+also protects writes that bypass the application. Application prechecks use the
+database's case conversion, matching the constraint's behavior.
 
 Settings are stored separately from the session. Flyway V6 changes the default
 to `false` for new accounts without changing any existing saved preferences. Only the session's
@@ -124,12 +187,22 @@ resolve any reported conflicts before retrying migration on an existing database
 | Login per client IP | 5 per rolling minute | 10 per rolling minute |
 | Login per normalized email | 5 per rolling minute | 5 per rolling minute |
 | Registration per client IP | 3 per rolling 10 minutes | 5 per rolling minute |
+| Verification operations per client IP | 30 per rolling minute | Same |
+| Code confirmations per registration | 10 per rolling minute | Same |
+| Email sends per client IP | 20 per rolling hour | Same |
+| Email sends per registration | 6 per hour | Same |
 
 Configure each quota with `attempts` and `window` under
 `app.auth.rate-limit.login-ip`, `app.auth.rate-limit.login-email`, or
 `app.auth.rate-limit.registration-ip`. Windows accept values such as `1m` or
 `10m`. Spring loads the development overrides from `application-dev.yml` when
 the `dev` profile is active.
+
+Verification uses `verification-ip` and `verification-registration`; sending uses
+`email-ip` and `email-registration` under the same prefix. A 60-second resend
+cooldown and a per-registration hourly send counter are also persisted under the
+account lock. These survive restarts and token/email changes. SMTP failures consume
+send quota. All cooldown and quota rejections return `429` with `Retry-After`.
 
 CSRF-valid requests count toward the IP limit before body validation. Login
 requests that pass IP and body validation also count toward the email limit,
@@ -138,7 +211,8 @@ whether the credentials succeed or fail. Rejected requests return `429` with
 
 Each limit keeps up to 10,000 keys in the running backend. Expired keys are
 removed as requests arrive. At capacity, new keys wait for an entry to expire.
-A restart resets the counters. Multiple backend instances have separate limits.
+A restart resets the in-memory counters; the persisted registration send counter
+and cooldown remain. Multiple backend instances have separate IP limits.
 For a shared limit across instances, enforce it at a trusted gateway or use a
 shared rate-limit store.
 
@@ -152,7 +226,7 @@ proxy share its IP limit.
 ### Football access
 
 Football schedule reads are public. Schedule and result writes require an
-`ADMIN` session and a valid CSRF token. To create a local admin, register a user and run this SQL
+`ADMIN` session and a valid CSRF token. To create a local admin, register and verify a user, then run this SQL
 against the local development database with a database operator account:
 
 ```sql
@@ -188,7 +262,7 @@ Country codes and competition/phase codes are normalized to uppercase.
 
 ### SuperLiga leaderboard
 
-`GET /api/leaderboard/superliga` requires a signed-in session. It returns a page of entries with
+`GET /api/leaderboard/superliga?page=0&size=20` requires a signed-in session. It returns a page of entries with
 `rank`, `userId`, `displayName`
 and `totalPoints`. The server
 selects Romania's `RO-SUPERLIGA` season covering the current UTC date. If
@@ -198,7 +272,25 @@ current-season leaderboard, including accounts without predictions or evaluated
 results, starting at zero points. New registrations appear on the next read.
 
 Points come from the current final results in that season. Users with the same
-total share a rank and appear in display name order. Rank applies across pages.
+total share a rank (for example 1, 2, 2, 4). Totals and ranks are calculated
+in the database across the whole selected season before `LIMIT` / `OFFSET`.
+Only points determine rank. Display order is points descending, then
+case-insensitive display name ascending and stable user UUID ascending.
+Rank applies across pages, including ties at page boundaries.
+
+The response is `PageView`: `items`, zero-based `page`, `size`, `totalElements`
+(all registered users), and `totalPages`. The default size is 20. Negative
+pages, noninteger parameters, and sizes outside 1–100 return `400`.
+An out-of-range page returns empty `items` and the actual totals, allowing the
+client to navigate to the last available page.
+
+`GET /api/leaderboard?competitionId={uuid}&seasonId={uuid}&page=0&size=20`
+uses the same query for an explicitly selected competition and season.
+The season must belong to that competition; a missing or mismatched season
+returns `404`. It also requires a signed-in session. The corresponding
+`GET /api/leaderboard/users/{userId}/predictions?competitionId={uuid}&seasonId={uuid}`
+returns that user's predictions and total for the same selection, with the
+same pagination and visibility rules as the SuperLiga route below.
 
 `GET /api/leaderboard/superliga/users/{userId}/predictions?page=0&size=20`
 also requires a signed-in session and returns the selected user's display name, competition and season names and IDs,

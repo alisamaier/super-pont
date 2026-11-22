@@ -68,15 +68,6 @@
   color: var(--lime);
 }
 
-.rules-formula {
-  margin-block: 20px;
-  padding: 16px 20px;
-  border-left: 3px solid var(--lime);
-  border-radius: 0 6px 6px 0;
-  background: #141e28;
-  overflow-wrap: anywhere;
-}
-
 .rules-table-wrap {
   margin-block: 20px 12px;
   overflow-x: auto;
@@ -92,11 +83,11 @@
   font-variant-numeric: tabular-nums;
 }
 
-.rules-table caption {
-  padding: 14px;
-  text-align: left;
-  color: #a5b2c4;
-  font-size: 12px;
+.rules-section h3 {
+  margin-top: 20px;
+  margin-bottom: 4px;
+  color: #edf0f5;
+  font-size: 16px;
 }
 
 .rules-table :is(th, td) {
@@ -136,11 +127,17 @@
     font-size: 18px;
   }
 
-  .rules-formula {
-    padding: 14px;
+  .rules-table :is(th, td) {
+    padding: 12px 6px;
+  }
+}
+
+@media (max-width: 360px) {
+  .rules-table {
+    font-size: 12px;
   }
 
   .rules-table :is(th, td) {
-    padding: 12px 6px;
+    padding-inline: 4px;
   }
 }
