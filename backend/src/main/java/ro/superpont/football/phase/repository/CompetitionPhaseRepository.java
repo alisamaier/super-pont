@@ -8,5 +8,7 @@ import ro.superpont.football.phase.model.CompetitionPhase;
 import java.util.*;
 
 public interface CompetitionPhaseRepository extends JpaRepository<CompetitionPhase, UUID> {
+    Optional<CompetitionPhase> findByProviderAndSeasonIdAndExternalId(String provider, UUID seasonId, String externalId);
+
     List<CompetitionPhase> findBySeasonIdOrderByPosition(UUID seasonId);
 }

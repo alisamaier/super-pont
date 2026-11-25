@@ -2,7 +2,8 @@ import { useEffect, useState, type MouseEvent } from "react";
 import { ArrowLeft, LoaderCircle } from "lucide-react";
 import { getPublicPredictions, type PublicPrediction } from "../api/publicPredictions";
 import { useResource } from "../hooks/useResource";
-import { matchStatusLabels } from "../lib/fixtures";
+import { badge, matchStatusLabels } from "../lib/fixtures";
+import { TeamBadge } from "./TeamBadge";
 import { LoadError } from "./LoadError";
 import { leaderboardPath } from "../lib/leaderboard";
 
@@ -88,6 +89,10 @@ export function UserPredictionsPage({
                     <div className="public-match-meta">
                       <time dateTime={prediction.kickoff}>{dateTime.format(new Date(prediction.kickoff))}</time>
                       <span>{matchStatusLabels[prediction.status]}</span>
+                    </div>
+                    <div className="public-team-logos">
+                      {prediction.homeTeamDetails && <TeamBadge team={badge(prediction.homeTeamDetails)} />}
+                      {prediction.awayTeamDetails && <TeamBadge team={badge(prediction.awayTeamDetails)} />}
                     </div>
                     <h3>{prediction.homeTeam} – {prediction.awayTeam}</h3>
                     {prediction.visibility === "HIDDEN" ? (

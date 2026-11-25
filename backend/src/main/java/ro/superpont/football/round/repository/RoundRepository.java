@@ -8,5 +8,7 @@ import ro.superpont.football.round.model.Round;
 import java.util.*;
 
 public interface RoundRepository extends JpaRepository<Round, UUID> {
+    Optional<Round> findByProviderAndPhaseIdAndExternalId(String provider, UUID phaseId, String externalId);
+
     Page<Round> findBySeasonId(UUID seasonId, Pageable pageable);
 }

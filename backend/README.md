@@ -50,6 +50,15 @@ database; use separate development and production databases.
 
 ## Authentication
 
+The administrator-only SportStats import is documented in
+[SuperLiga import setup and manual command](../README.md#sportstatsapi-superliga-import).
+`POST /api/admin/sportstats/sync` accepts `dateFrom` and `dateTo` (ISO dates),
+requires a verified `ADMIN` session and CSRF, and returns a `200` import summary.
+`400`: invalid date range, `401`/`403`: authentication/authorization/CSRF,
+`409`: another import is running or an identity conflict, `429` with `Retry-After`:
+provider cooldown, `503`: key not configured, `502`: provider/import failure.
+Only controlled error codes are exposed, never provider response bodies or keys.
+
 | Method and path | Input and response |
 | --- | --- |
 | `GET /api/auth/csrf` | Starts or reuses a session and returns `headerName` and `token` (plus `parameterName`). |
@@ -399,3 +408,37 @@ TEST_DATABASE_PASSWORD=<test-password>
 
 Then run `./gradlew test --tests '*FootballApiTests' --rerun-tasks`.
 These tests create test records; use a fresh isolated database, never production.
+## Imported team logos
+
+Flyway **V13__team_logo_cache.sql** adds nullable logo metadata to `teams` and a
+unique `(provider, provider_team_id)` index. Existing IDs and relationships stay
+unchanged; there is no backfill based on names.
+
+- `POST /api/admin/sportstats/logos?force=false`: verified ADMIN session + CSRF;
+  downloads only missing/due images. `force=true` also refreshes cached ones.
+  Returns `{downloaded,cached,missing,errors,warnings}`. No request URL is accepted.
+- `GET /api/teams/{uuid}/logo`: public cached PNG, 404 if absent, ETag supported.
+- Team views embedded in match/prediction responses include nullable `logoUrl`
+  and `logoCredit`. Prediction responses retain their existing name fields and
+  add `homeTeamDetails`/`awayTeamDetails` with the same team view.
+
+Configuration: `TEAM_LOGO_CACHE_DIR`, `TEAM_LOGO_AUTOMATIC_ENABLED` (false),
+`TEAM_LOGO_CHECK_INTERVAL` (`PT5M`), and the existing `SPORTSTATS_API_KEY`.
+Automatic missing-image checks run independently from optional match sync, share
+its database lease and Retry-After, and never run in builds/tests. For local setup
+and the secure PowerShell import command, see the root README's Team logos section.
+
+## Hosted test configuration
+
+Follow [the deployment guide](../docs/DEPLOY.md) for the `prod` profile, verified
+TLS to Neon, Vercel same-origin API proxy, Brevo HTTPS email and secure first-admin
+promotion. Local SMTP remains supported; Render Free must use the HTTPS transport.
+Account confirmation and password recovery share `MAIL_PROVIDER` (`smtp` locally,
+`brevo` in prod), `MAIL_FROM` and `BREVO_API_KEY` for Brevo. Provider error bodies
+and credentials are not returned or logged.
+
+V14 adds `team_logo_images(hash, png)` with a 2 MiB bound. `prod` selects
+`database` storage; other profiles default to `filesystem` with `TEAM_LOGO_STORAGE`.
+Both stores retain validated PNG, SHA-256 identity, HTTP caching and existing
+missing-image fallback. Local files are not uploaded automatically to a hosted DB.
+`prod` disables both schedulers and rejects development seeds and filesystem storage.

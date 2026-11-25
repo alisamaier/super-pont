@@ -25,7 +25,7 @@ class DevelopmentSeedTests {
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM competitions", Long.class))
                 .isEqualTo(1);
         assertThat(jdbc.queryForObject("SELECT name FROM competitions", String.class))
-                .isEqualTo("SuperLiga");
+                .isEqualTo("SuperLiga DEMO");
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM teams", Long.class)).isEqualTo(8);
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM competition_phases", Long.class))
                 .isEqualTo(3);

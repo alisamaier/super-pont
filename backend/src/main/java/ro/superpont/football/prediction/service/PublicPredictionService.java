@@ -80,6 +80,7 @@ public class PublicPredictionService {
                 match.getAwayScore(), prediction.getHomeScore(), prediction.getAwayScore()) : null;
         return new PublicPredictionView(match.getId(), round.getId(), round.getNumber(), round.getName(),
                 round.getPhase().getName(), match.getHomeTeam().getName(), match.getAwayTeam().getName(),
+                ro.superpont.football.team.dto.TeamView.of(match.getHomeTeam()), ro.superpont.football.team.dto.TeamView.of(match.getAwayTeam()),
                 match.getKickoff(), match.getStatus(),
                 revealed ? PublicPredictionView.Visibility.REVEALED : PublicPredictionView.Visibility.HIDDEN,
                 score, result);

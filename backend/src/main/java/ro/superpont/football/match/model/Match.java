@@ -2,7 +2,7 @@ package ro.superpont.football.match.model;
 
 import jakarta.persistence.*;
 
-import ro.superpont.common.BaseEntity;
+import ro.superpont.common.ExternalEntity;
 import ro.superpont.football.round.model.Round;
 import ro.superpont.football.season.model.Season;
 import ro.superpont.football.team.model.Team;
@@ -12,7 +12,21 @@ import java.util.*;
 
 @Entity
 @Table(name = "football_matches")
-public class Match extends BaseEntity {
+public class Match extends ExternalEntity {
+    @Column(name = "source_updated_at")
+    private Instant sourceUpdatedAt;
+
+    public Instant getSourceUpdatedAt() { return sourceUpdatedAt; }
+
+    public void updateImportedSchedule(Round round, Team home, Team away, OffsetDateTime kickoff, String venue, Instant updatedAt) {
+        this.round = round;
+        this.season = round.getSeason();
+        this.homeTeam = home;
+        this.awayTeam = away;
+        this.kickoff = kickoff;
+        this.venue = venue;
+        this.sourceUpdatedAt = updatedAt;
+    }
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "round_id", nullable = false)
     private Round round;

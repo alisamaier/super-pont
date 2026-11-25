@@ -8,5 +8,7 @@ import ro.superpont.football.competition.model.Competition;
 import java.util.*;
 
 public interface CompetitionRepository extends JpaRepository<Competition, UUID> {
+    Optional<Competition> findByProviderAndExternalId(String provider, String externalId);
+
     Page<Competition> findByCountryId(UUID countryId, Pageable pageable);
 }

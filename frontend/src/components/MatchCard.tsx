@@ -48,7 +48,7 @@ export function MatchCard({
         <span>
           {fixture.date} <span className="meta-dot">·</span>{" "}
           <strong>{fixture.time}</strong>
-          {fixture.homeScore !== null && fixture.awayScore !== null && (
+          {(fixture.status === "FINISHED" || fixture.status === "LIVE") && fixture.homeScore !== null && fixture.awayScore !== null && (
             <>
               <span className="meta-dot">·</span>
               <strong>

@@ -1,5 +1,6 @@
 import { Check, ClipboardList, Save } from "lucide-react";
 import type { Fixture, SavedPredictions } from "../types";
+import { TeamBadge } from "./TeamBadge";
 
 export function PredictionSummary({
   saved,
@@ -19,6 +20,9 @@ export function PredictionSummary({
   onSaveAll: () => void;
 }) {
   const count = Object.keys(saved).length;
+  const credits = [...new Set(fixtures.filter((fixture) => saved[fixture.id])
+    .flatMap((fixture) => [fixture.home, fixture.away])
+    .filter((team) => team.logoUrl && team.logoCredit).map((team) => team.logoCredit!))];
   return (
     <aside
       className="prediction-sidebar"
@@ -84,9 +88,9 @@ export function PredictionSummary({
               const { home, away, result } = saved[fixture.id];
               return (
                 <div className="saved-line" key={fixture.id}>
-                  <span>{fixture.home.shortName}</span>
+                  <span className="saved-team"><TeamBadge team={fixture.home} compact />{fixture.home.shortName}</span>
                   <strong>{home}<span>:</span>{away}</strong>
-                  <span>{fixture.away.shortName}</span>
+                  <span className="saved-team"><TeamBadge team={fixture.away} compact />{fixture.away.shortName}</span>
                   <div className="saved-result">
                     {result === null ? (
                       <span>În așteptare</span>
@@ -102,6 +106,7 @@ export function PredictionSummary({
             })
         )}
       </div>
+      {credits.length > 0 && <div className="summary-logo-credits">{credits.map((credit) => <p key={credit}>{credit}</p>)}</div>}
     </aside>
   );
 }

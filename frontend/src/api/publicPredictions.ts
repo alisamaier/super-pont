@@ -1,7 +1,7 @@
 import { isUuid } from "../lib/uuid";
-import { getJson } from "./football";
+import { getJson, isTeam } from "./football";
 import { invalidResponse, isRecord, readPage } from "./page";
-import { matchStatuses, type MatchStatus, type PageView } from "./types";
+import { matchStatuses, type MatchStatus, type PageView, type TeamView } from "./types";
 import type { LeaderboardScope } from "../lib/leaderboard";
 
 interface PublicMatch {
@@ -12,6 +12,8 @@ interface PublicMatch {
   phaseName: string;
   homeTeam: string;
   awayTeam: string;
+  homeTeamDetails?: TeamView;
+  awayTeamDetails?: TeamView;
   kickoff: string;
   status: MatchStatus;
 }
@@ -52,6 +54,8 @@ function isPublicPrediction(value: unknown): value is PublicPrediction {
     !integer(value.roundNumber) || value.roundNumber < 1 ||
     typeof value.roundName !== "string" || typeof value.phaseName !== "string" ||
     typeof value.homeTeam !== "string" || typeof value.awayTeam !== "string" ||
+    (value.homeTeamDetails !== undefined && !isTeam(value.homeTeamDetails)) ||
+    (value.awayTeamDetails !== undefined && !isTeam(value.awayTeamDetails)) ||
     !timestamp(value.kickoff) || !matchStatuses.includes(value.status as MatchStatus)
   ) return false;
   if (value.visibility === "HIDDEN") return !("predictedScore" in value) && value.result === null;

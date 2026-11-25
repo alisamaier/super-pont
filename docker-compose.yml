@@ -24,10 +24,11 @@ services:
   backend:
     image: eclipse-temurin:25-jdk-jammy
     working_dir: /app
-    command: sh ./gradlew bootRun --no-daemon
+    command: sh ./gradlew bootRun --no-daemon --project-cache-dir /root/.gradle/project-cache
     volumes:
       - ./backend:/app
       - gradle_cache:/root/.gradle
+      - team_logo_cache:/var/lib/super-pont/logos
     environment:
       SPRING_PROFILES_ACTIVE: dev
       LEADERBOARD_DEMO: ${LEADERBOARD_DEMO:-false}
@@ -35,6 +36,17 @@ services:
       DATABASE_USERNAME: ${POSTGRES_USER:-superpont}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      SPORTSTATS_API_KEY: ${SPORTSTATS_API_KEY:-}
+      TEAM_LOGO_CACHE_DIR: /var/lib/super-pont/logos
+      TEAM_LOGO_AUTOMATIC_ENABLED: ${TEAM_LOGO_AUTOMATIC_ENABLED:-false}
+      TEAM_LOGO_CHECK_INTERVAL: ${TEAM_LOGO_CHECK_INTERVAL:-PT5M}
+      SPORTSTATS_SYNC_ENABLED: ${SPORTSTATS_SYNC_ENABLED:-false}
+      SPORTSTATS_SYNC_INTERVAL: ${SPORTSTATS_SYNC_INTERVAL:-PT30M}
+      SPORTSTATS_DAYS_BACK: ${SPORTSTATS_DAYS_BACK:-7}
+      SPORTSTATS_DAYS_AHEAD: ${SPORTSTATS_DAYS_AHEAD:-14}
+      SPORTSTATS_PHASE_DIVISIONS: ${SPORTSTATS_PHASE_DIVISIONS:-dx2=REGULAR}
+      SPORTSTATS_SEASON_START_MONTH: ${SPORTSTATS_SEASON_START_MONTH:-7}
+      SPORTSTATS_SEASON_START_DAY: ${SPORTSTATS_SEASON_START_DAY:-1}
       PASSWORD_RESET_FRONTEND_URL: ${PASSWORD_RESET_FRONTEND_URL:-${FRONTEND_URL:-http://localhost:5173}}
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
@@ -68,6 +80,7 @@ services:
       - backend
 
 volumes:
+  team_logo_cache:
   postgres_data:
   gradle_cache:
   frontend_node_modules:

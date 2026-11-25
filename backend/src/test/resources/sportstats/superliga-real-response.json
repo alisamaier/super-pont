@@ -1,0 +1,519 @@
+{
+  "data": [
+    {
+      "code": "m93hs",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 16",
+      "sport": "soccer",
+      "start_at": "2026-11-20T15:30:00Z",
+      "start_date": "2026-11-20",
+      "start_time": "15:30",
+      "status": "FT",
+      "status_code": "final",
+      "updated_at": "2026-11-20T17:27:46Z",
+      "home_team": {
+        "code": "t1ma",
+        "name": "FC Botosani",
+        "display_name": "FC Botoșani",
+        "score": 3
+      },
+      "away_team": {
+        "code": "t1mk",
+        "name": "FC Voluntari",
+        "display_name": "FC Voluntari",
+        "score": 3
+      },
+      "venue": "Stadionul Municipal",
+      "full_time_score": "[3-3]",
+      "half_time_score": "[2-0]",
+      "periods": [
+        {
+          "period": "1",
+          "label": "1st half",
+          "home": 2,
+          "away": 0
+        },
+        {
+          "period": "FT",
+          "label": "Full time",
+          "home": 3,
+          "away": 3,
+          "cumulative": true
+        }
+      ]
+    },
+    {
+      "code": "m93hq",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 16",
+      "sport": "soccer",
+      "start_at": "2026-11-20T18:30:00Z",
+      "start_date": "2026-11-20",
+      "start_time": "18:30",
+      "status": "FT",
+      "status_code": "final",
+      "updated_at": "2026-11-20T20:29:25Z",
+      "home_team": {
+        "code": "t67q",
+        "name": "Farul Constanta",
+        "display_name": "Farul Constanța",
+        "score": 2
+      },
+      "away_team": {
+        "code": "t5ac",
+        "name": "U. Cluj",
+        "display_name": "U. Cluj",
+        "score": 3
+      },
+      "venue": "Central Stadium Hagi Academy",
+      "full_time_score": "[2-3]",
+      "half_time_score": "[1-1]",
+      "periods": [
+        {
+          "period": "1",
+          "label": "1st half",
+          "home": 1,
+          "away": 1
+        },
+        {
+          "period": "FT",
+          "label": "Full time",
+          "home": 2,
+          "away": 3,
+          "cumulative": true
+        }
+      ]
+    },
+    {
+      "code": "m93ho",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 16",
+      "sport": "soccer",
+      "start_at": "2026-11-21T13:00:00Z",
+      "start_date": "2026-11-21",
+      "start_time": "13:00",
+      "status": "FT",
+      "status_code": "final",
+      "updated_at": "2026-11-21T14:52:17Z",
+      "home_team": {
+        "code": "t3uz",
+        "name": "Csikszereda M. Ciuc",
+        "display_name": "Csikszereda M. Ciuc",
+        "score": 0
+      },
+      "away_team": {
+        "code": "t7or",
+        "name": "Corvinul",
+        "display_name": "Corvinul",
+        "score": 4
+      },
+      "venue": "Stadionul Municipal",
+      "full_time_score": "[0-4]",
+      "half_time_score": "[0-1]",
+      "periods": [
+        {
+          "period": "1",
+          "label": "1st half",
+          "home": 0,
+          "away": 1
+        },
+        {
+          "period": "FT",
+          "label": "Full time",
+          "home": 0,
+          "away": 4,
+          "cumulative": true
+        }
+      ]
+    },
+    {
+      "code": "m93hn",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 16",
+      "sport": "soccer",
+      "start_at": "2026-11-21T15:30:00Z",
+      "start_date": "2026-11-21",
+      "start_time": "15:30",
+      "status": "FT",
+      "status_code": "final",
+      "updated_at": "2026-11-21T17:28:23Z",
+      "home_team": {
+        "code": "t1me",
+        "name": "CFR Cluj",
+        "display_name": "CFR Cluj",
+        "score": 3
+      },
+      "away_team": {
+        "code": "t1n6",
+        "name": "Otelul",
+        "display_name": "Oțelul",
+        "score": 2
+      },
+      "venue": "Dr. Constantin Rădulescu, Cluj Napoca",
+      "full_time_score": "[3-2]",
+      "half_time_score": "[2-1]",
+      "periods": [
+        {
+          "period": "1",
+          "label": "1st half",
+          "home": 2,
+          "away": 1
+        },
+        {
+          "period": "FT",
+          "label": "Full time",
+          "home": 3,
+          "away": 2,
+          "cumulative": true
+        }
+      ]
+    },
+    {
+      "code": "m93hp",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 16",
+      "sport": "soccer",
+      "start_at": "2026-11-21T18:30:00Z",
+      "start_date": "2026-11-21",
+      "start_time": "18:30",
+      "status": "FT",
+      "status_code": "final",
+      "updated_at": "2026-11-21T20:50:45Z",
+      "home_team": {
+        "code": "t1ms",
+        "name": "Dinamo Bucuresti",
+        "display_name": "Dinamo București",
+        "score": 0
+      },
+      "away_team": {
+        "code": "t5ai",
+        "name": "Petrolul",
+        "display_name": "Petrolul",
+        "score": 1
+      },
+      "venue": "Arena Nationala",
+      "full_time_score": "[0-1]",
+      "half_time_score": "[0-1]",
+      "periods": [
+        {
+          "period": "1",
+          "label": "1st half",
+          "home": 0,
+          "away": 1
+        },
+        {
+          "period": "FT",
+          "label": "Full time",
+          "home": 0,
+          "away": 1,
+          "cumulative": true
+        }
+      ]
+    },
+    {
+      "code": "m93hu",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 16",
+      "sport": "soccer",
+      "start_at": "2026-11-22T15:30:00Z",
+      "start_date": "2026-11-22",
+      "start_time": "15:30",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-15T06:00:12Z",
+      "home_team": {
+        "code": "t44w",
+        "name": "UTA Arad",
+        "display_name": "UTA Arad"
+      },
+      "away_team": {
+        "code": "t3wo",
+        "name": "Univ. Craiova",
+        "display_name": "Univ. Craiova"
+      },
+      "venue": "Arena Francisc Neuman"
+    },
+    {
+      "code": "m93hr",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 16",
+      "sport": "soccer",
+      "start_at": "2026-11-22T18:30:00Z",
+      "start_date": "2026-11-22",
+      "start_time": "18:30",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-15T06:00:12Z",
+      "home_team": {
+        "code": "t3lp",
+        "name": "FC Arges",
+        "display_name": "FC Argeș"
+      },
+      "away_team": {
+        "code": "t1nc",
+        "name": "FCSB",
+        "display_name": "FCSB"
+      }
+    },
+    {
+      "code": "m93ht",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 16",
+      "sport": "soccer",
+      "start_at": "2026-11-23T18:00:00Z",
+      "start_date": "2026-11-23",
+      "start_time": "18:00",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-16T06:00:12Z",
+      "home_team": {
+        "code": "t44h",
+        "name": "Sepsi Sf. Gheorghe",
+        "display_name": "Sepsi Sf. Gheorghe"
+      },
+      "away_team": {
+        "code": "t1n9",
+        "name": "FC Rapid Bucuresti",
+        "display_name": "FC Rapid București"
+      },
+      "venue": "Stadionul Sepsi"
+    },
+    {
+      "code": "m93i1",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 17",
+      "sport": "soccer",
+      "start_at": "2026-11-27T15:30:00Z",
+      "start_date": "2026-11-27",
+      "start_time": "15:30",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-20T06:00:32Z",
+      "home_team": {
+        "code": "t5ac",
+        "name": "U. Cluj",
+        "display_name": "U. Cluj"
+      },
+      "away_team": {
+        "code": "t44h",
+        "name": "Sepsi Sf. Gheorghe",
+        "display_name": "Sepsi Sf. Gheorghe"
+      },
+      "venue": "Cluj Arena"
+    },
+    {
+      "code": "m93i0",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 17",
+      "sport": "soccer",
+      "start_at": "2026-11-27T18:30:00Z",
+      "start_date": "2026-11-27",
+      "start_time": "18:30",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-20T06:00:32Z",
+      "home_team": {
+        "code": "t5ai",
+        "name": "Petrolul",
+        "display_name": "Petrolul"
+      },
+      "away_team": {
+        "code": "t3lp",
+        "name": "FC Arges",
+        "display_name": "FC Argeș"
+      }
+    },
+    {
+      "code": "m93hy",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 17",
+      "sport": "soccer",
+      "start_at": "2026-11-28T12:30:00Z",
+      "start_date": "2026-11-28",
+      "start_time": "12:30",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-21T06:00:31Z",
+      "home_team": {
+        "code": "t1mk",
+        "name": "FC Voluntari",
+        "display_name": "FC Voluntari"
+      },
+      "away_team": {
+        "code": "t1me",
+        "name": "CFR Cluj",
+        "display_name": "CFR Cluj"
+      },
+      "venue": "Stadionul Anghel Iordanescu"
+    },
+    {
+      "code": "m93hv",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 17",
+      "sport": "soccer",
+      "start_at": "2026-11-28T15:00:00Z",
+      "start_date": "2026-11-28",
+      "start_time": "15:00",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-21T06:00:31Z",
+      "home_team": {
+        "code": "t7or",
+        "name": "Corvinul",
+        "display_name": "Corvinul"
+      },
+      "away_team": {
+        "code": "t67q",
+        "name": "Farul Constanta",
+        "display_name": "Farul Constanța"
+      },
+      "venue": "Petre Libardi Stadium"
+    },
+    {
+      "code": "m93hx",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 17",
+      "sport": "soccer",
+      "start_at": "2026-11-28T18:00:00Z",
+      "start_date": "2026-11-28",
+      "start_time": "18:00",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-21T06:00:31Z",
+      "home_team": {
+        "code": "t1nc",
+        "name": "FCSB",
+        "display_name": "FCSB"
+      },
+      "away_team": {
+        "code": "t3uz",
+        "name": "Csikszereda M. Ciuc",
+        "display_name": "Csikszereda M. Ciuc"
+      },
+      "venue": "Arena Nationala"
+    },
+    {
+      "code": "m93hz",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 17",
+      "sport": "soccer",
+      "start_at": "2026-11-29T13:00:00Z",
+      "start_date": "2026-11-29",
+      "start_time": "13:00",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-22T06:00:31Z",
+      "home_team": {
+        "code": "t1n6",
+        "name": "Otelul",
+        "display_name": "Oțelul"
+      },
+      "away_team": {
+        "code": "t44w",
+        "name": "UTA Arad",
+        "display_name": "UTA Arad"
+      },
+      "venue": "Stadionul Otelul"
+    },
+    {
+      "code": "m93hw",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 17",
+      "sport": "soccer",
+      "start_at": "2026-11-29T18:00:00Z",
+      "start_date": "2026-11-29",
+      "start_time": "18:00",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-22T06:00:31Z",
+      "home_team": {
+        "code": "t1n9",
+        "name": "FC Rapid Bucuresti",
+        "display_name": "FC Rapid București"
+      },
+      "away_team": {
+        "code": "t1ma",
+        "name": "FC Botosani",
+        "display_name": "FC Botoșani"
+      },
+      "venue": "Superbet Arena - Giulesti"
+    },
+    {
+      "code": "m93i2",
+      "league_code": "l60",
+      "division_code": "dx2",
+      "league_name": "Romania: Superliga",
+      "season": "2026/2027",
+      "round": "Week 17",
+      "sport": "soccer",
+      "start_at": "2026-11-30T18:00:00Z",
+      "start_date": "2026-11-30",
+      "start_time": "18:00",
+      "status": "NS",
+      "status_code": "scheduled",
+      "updated_at": "2026-11-18T01:55:32Z",
+      "home_team": {
+        "code": "t3wo",
+        "name": "Univ. Craiova",
+        "display_name": "Univ. Craiova"
+      },
+      "away_team": {
+        "code": "t1ms",
+        "name": "Dinamo Bucuresti",
+        "display_name": "Dinamo București"
+      },
+      "venue": "Stadionul Ion Oblemenco"
+    }
+  ],
+  "meta": {
+    "total": 16,
+    "limit": 50,
+    "offset": 0
+  },
+  "success": true
+}

@@ -4,23 +4,41 @@ import jakarta.mail.MessagingException;
 import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMultipart;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.mail.MailSendException;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Component;
 
-/** Shared SMTP transport. Callers must never log delivery exceptions or message content. */
+/** Shared account transport. Callers must never log delivery exceptions or message content. */
 @Component
 public class AccountEmailSender {
     private final JavaMailSender mail;
     private final String from;
+    private final AccountEmailTransport https;
 
     public AccountEmailSender(JavaMailSender mail, @Value("${app.mail.from}") String from) {
         this.mail = mail;
         this.from = from;
+        this.https = null;
+    }
+
+    @Autowired
+    public AccountEmailSender(JavaMailSender mail, @Value("${app.mail.from}") String from,
+            @Value("${app.mail.provider:smtp}") String provider,
+            @Value("${app.mail.brevo-api-key:}") String apiKey, JsonMapper json) {
+        this.mail = mail;
+        this.from = from;
+        this.https = switch (provider) {
+            case "smtp" -> null;
+            case "brevo" -> new BrevoEmailTransport(apiKey, from, json);
+            default -> throw new IllegalArgumentException("MAIL_PROVIDER must be smtp or brevo");
+        };
     }
 
     public void send(String recipient, String subject, String text, String html) {
+        if (https != null) { https.send(recipient, subject, text, html); return; }
         try {
             var message = mail.createMimeMessage();
             var helper = new MimeMessageHelper(message, false, "UTF-8");

@@ -163,7 +163,7 @@ class FootballApiTests {
 
     @Test
     void migrationsRunWithoutDevelopmentSeeds() {
-        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("11");
+        assertThat(flyway.info().current().getVersion().toString()).isEqualTo("14");
         assertThat(
                         jdbc.queryForObject(
                                 "SELECT COUNT(*) FROM competitions WHERE code = 'RO-SUPERLIGA'",

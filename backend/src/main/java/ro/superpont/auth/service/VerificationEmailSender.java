@@ -4,13 +4,17 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.util.HtmlUtils;
 
 @Component
 public class VerificationEmailSender {
     private final AccountEmailSender mail;
+    private final String frontendUrl;
 
-    public VerificationEmailSender(AccountEmailSender mail) {
+    public VerificationEmailSender(AccountEmailSender mail, @Value("${app.frontend-url}") String frontendUrl) {
         this.mail = mail;
+        this.frontendUrl = frontendUrl;
     }
 
     public void send(String recipient, String code, Instant expiresAt) {
@@ -21,24 +25,26 @@ public class VerificationEmailSender {
 
                 Confirmă adresa de email
                 Codul tău de verificare este: %s
+                Revino la pagina de confirmare în același browser: %s/confirma-email
 
                 Codul este valabil 10 minute, până la %s, și poate fi folosit o singură dată.
                 Ai primit acest mesaj deoarece a fost creat un cont Super Pont cu această adresă.
                 Dacă nu ai solicitat înregistrarea, poți ignora acest mesaj.
                 Nu comunica acest cod altor persoane.
-                """.formatted(code, deadline);
+                """.formatted(code, frontendUrl, deadline);
         var html = """
                 <!doctype html><html lang="ro"><body style="font-family:Arial,sans-serif;background:#0d131d;color:#edf0f5;padding:32px">
                 <div style="max-width:520px;margin:auto;padding:28px;background:#172130;border-radius:12px">
                 <strong style="color:#c9f76a;font-size:24px">SUPER PONT</strong>
                 <h1 style="font-size:24px">Confirmă adresa de email</h1>
                 <p>Introdu acest cod în pagina de confirmare:</p>
+                <p><a href="%s/confirma-email" style="color:#c9f76a">Revino la confirmare în același browser</a></p>
                 <p style="font-size:36px;letter-spacing:8px;color:#c9f76a"><strong>%s</strong></p>
                 <p>Codul este valabil <strong>10 minute</strong>, până la %s, și poate fi folosit o singură dată.</p>
                 <p>Ai primit acest mesaj deoarece a fost creat un cont Super Pont cu această adresă.</p>
                 <p>Dacă nu ai solicitat înregistrarea, poți ignora acest mesaj. Nu comunica acest cod altor persoane.</p>
                 </div></body></html>
-                """.formatted(code, deadline);
+                """.formatted(HtmlUtils.htmlEscape(frontendUrl), code, deadline);
         mail.send(recipient, "Super Pont — Confirmă adresa de email", text, html);
     }
 }

@@ -1,0 +1,23 @@
+# Empty hosted database: only versioned migrations, never db/devdata.
+spring:
+  mail:
+    host: ${SMTP_HOST:smtp-unused.invalid}
+  flyway:
+    locations: classpath:db/migration
+
+app:
+  team-logos:
+    storage: database
+    automatic-enabled: false
+  sportstats:
+    sync-enabled: false
+  mail:
+    provider: ${MAIL_PROVIDER:brevo}
+    from: ${MAIL_FROM}
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+        same-site: lax

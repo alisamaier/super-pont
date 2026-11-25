@@ -39,11 +39,30 @@ spring:
       accept-float-as-int: false
 
 app:
+  team-logos:
+    storage: ${TEAM_LOGO_STORAGE:filesystem}
+    cache-dir: ${TEAM_LOGO_CACHE_DIR:./.local-cache/team-logos}
+    automatic-enabled: ${TEAM_LOGO_AUTOMATIC_ENABLED:false}
+    check-interval: ${TEAM_LOGO_CHECK_INTERVAL:PT5M}
+  sportstats:
+    api-key: ${SPORTSTATS_API_KEY:}
+    sync-enabled: ${SPORTSTATS_SYNC_ENABLED:false}
+    sync-interval: ${SPORTSTATS_SYNC_INTERVAL:PT30M}
+    connect-timeout: ${SPORTSTATS_CONNECT_TIMEOUT:PT5S}
+    request-timeout: ${SPORTSTATS_REQUEST_TIMEOUT:PT10S}
+    max-pages: 50
+    days-back: ${SPORTSTATS_DAYS_BACK:7}
+    days-ahead: ${SPORTSTATS_DAYS_AHEAD:14}
+    season-start-month: ${SPORTSTATS_SEASON_START_MONTH:7}
+    season-start-day: ${SPORTSTATS_SEASON_START_DAY:1}
+    phase-divisions: ${SPORTSTATS_PHASE_DIVISIONS:dx2=REGULAR}
   frontend-url: ${FRONTEND_URL}
   password-reset:
     frontend-url: ${PASSWORD_RESET_FRONTEND_URL:${app.frontend-url}}
   mail:
-    from: ${SMTP_FROM:no-reply@superpont.example}
+    provider: ${MAIL_PROVIDER:smtp}
+    brevo-api-key: ${BREVO_API_KEY:}
+    from: ${MAIL_FROM:${SMTP_FROM:no-reply@superpont.example}}
   auth:
     rate-limit:
       login-ip:
@@ -93,11 +112,17 @@ management:
         include: health
   endpoint:
     health:
+      show-components: never
       show-details: never
       probes:
-        enabled: true
+        enabled: false
 
 server:
+  error:
+    include-message: never
+    include-binding-errors: never
+    include-stacktrace: never
+    include-exception: false
   port: ${PORT:8080}
   address: 0.0.0.0
   shutdown: graceful

@@ -2,7 +2,7 @@ package ro.superpont.football.competition.model;
 
 import jakarta.persistence.*;
 
-import ro.superpont.common.BaseEntity;
+import ro.superpont.common.ExternalEntity;
 import ro.superpont.football.country.model.Country;
 
 import java.time.*;
@@ -10,7 +10,7 @@ import java.util.*;
 
 @Entity
 @Table(name = "competitions")
-public class Competition extends BaseEntity {
+public class Competition extends ExternalEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "country_id", nullable = false)
     private Country country;

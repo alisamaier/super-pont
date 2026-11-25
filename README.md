@@ -244,6 +244,133 @@ Messages include Romanian plain text and HTML alternatives, the code, and its
 UTC expiration time. Codes and SMTP credentials are never returned in API JSON
 or written to application logs.
 
+## SportStatsAPI SuperLiga import
+
+The backend imports `GET https://api.sportstatsapi.com/api/v1/soccer/matches`
+with `league_name=Romania: Superliga`, `date_from`, `date_to`, `limit`, and
+`offset`. It sends the key only as `Authorization: Bearer ...`. The frontend
+continues reading our PostgreSQL-backed API; it never receives the key or calls
+SportStatsAPI. No logo URLs are generated.
+
+Set these in the ignored root `.env` for Compose (or export them in the backend
+process/provider environment for a host-run or deployed backend):
+
+```dotenv
+SPORTSTATS_API_KEY=your-provider-key
+SPORTSTATS_SYNC_ENABLED=false
+SPORTSTATS_SYNC_INTERVAL=PT30M
+SPORTSTATS_DAYS_BACK=7
+SPORTSTATS_DAYS_AHEAD=14
+```
+
+Leave automatic synchronization disabled for the first import. Start/recreate
+the backend so Flyway applies **V12 — sportstats import** and loads the settings:
+
+```powershell
+podman compose up -d db mailpit backend frontend
+podman compose restart backend
+```
+
+V12 adds external provider identities, uniqueness constraints, a database-wide
+sync lease/backoff row, the provider update timestamp, and non-scoring
+`SUSPENDED`/`UNKNOWN` statuses. It preserves all existing UUIDs and predictions.
+The development seed labels its competition **SuperLiga DEMO**; the imported
+**SuperLiga** is a separate competition and season. Imported clubs also receive
+separate UUIDs even when their display names match demo clubs. No existing
+fixtures are deleted, recreated, or matched by names.
+
+Use a verified **ADMIN** account (see [local admin setup](backend/README.md#authentication)).
+From the repository root, the first manual import for the supplied sample is:
+
+```powershell
+.\backend\scripts\Sync-SportStats.ps1 -DateFrom 2026-11-15 -DateTo 2026-12-06
+```
+
+The command prompts for the administrator's email and password, logs in through
+the existing cookie/CSRF flow, invokes `POST /api/admin/sportstats/sync`, prints
+the summary, and logs out. It never asks for or sends the provider key. Optional
+`-ApiUrl https://your-backend.example` selects a deployed backend. The endpoint
+accepts JSON `dateFrom`/`dateTo`, with at most 367 inclusive days. Summary fields
+are `pages`, `created`, `updated`, `ignored`, `errors`, `warnings`, and `completedAt`.
+Unchanged records count as ignored; malformed records and unconfirmed results
+are reported with controlled warning codes.
+
+The supplied response identifies SuperLiga as `l60`, the current regular
+division as `dx2`, and rounds as `Week 16`/`Week 17`. Plain `Week N`/`Round N`
+labels use a configured division-to-phase mapping, initially `dx2=REGULAR`.
+Explicit `Play-off N`/`Championship Round N` and `Play-out N`/`Relegation Round N`
+labels identify their phases directly. Round identities include provider,
+competition, season, division and phase, so equal round numbers remain separate.
+If the provider sends another division with a plain round label, import reports
+`PHASE_MAPPING_REQUIRED` and skips it until its verified code is configured:
+
+```dotenv
+# Replace placeholders only with actual codes from the provider.
+SPORTSTATS_PHASE_DIVISIONS=dx2=REGULAR,verified_playoff_code=PLAY_OFF,verified_playout_code=PLAY_OUT
+```
+
+No phase is inferred from a hardcoded regular-season round count. The API does
+not provide season date boundaries in this response: `2026/2027` defaults to
+1 July 2026–30 June 2027, configurable with `SPORTSTATS_SEASON_START_MONTH` and
+`SPORTSTATS_SEASON_START_DAY`. Out-of-season kickoffs are reported instead of
+silently changing the season. A new match without a known `start_at` is skipped;
+an existing postponed/cancelled match can retain its last known kickoff while
+its status and scores are updated.
+
+Scores come from `home_team.score`/`away_team.score`. Missing scores are null,
+never invented as 0–0. Only a valid `FINISHED` result scores points. Corrected
+results and a final changed back to live, suspended, cancelled or unconfirmed
+are reflected by the existing scoring queries, without awarding points twice.
+The existing prediction deadline and visibility rules use the imported kickoff
+and the server clock. A result without both valid final scores becomes
+`UNKNOWN`, without points. This integration does not change the scoring formula
+or introduce a different extra-time/penalty scoring rule.
+
+All pages are fetched before football data changes. HTTP/JSON/pagination errors
+leave the saved snapshot intact. Requests have bounded timeouts, at most 50
+pages, no automatic request retries and no redirect following. `Retry-After`
+(seconds or HTTP date) is saved in PostgreSQL and blocks subsequent manual and
+automatic attempts until that time. Other failures use a 30-second backoff.
+`402`/`PAYMENT_REQUIRED` stops the run: there is no payment client or payment retry.
+The database lease prevents overlapping runs across backend instances; it expires
+after 15 minutes following a crash. During the import transaction its row remains
+locked through commit. Provider error bodies and credentials are excluded from
+logs and API errors; logs contain safe status warnings and summary counts.
+
+After the first import, automatic synchronization is explicitly enabled with:
+
+```dotenv
+SPORTSTATS_SYNC_ENABLED=true
+SPORTSTATS_SYNC_INTERVAL=PT30M
+```
+
+Then run `podman compose up -d backend` (or restart the configured deployed
+backend). The scheduler first runs after one interval and uses today in UTC,
+minus seven days through plus fourteen days by default. **Automatic synchronization
+works only while the backend is running. If the hosting service sleeps, updates
+stop until it resumes.** No external scheduler wakes a sleeping host.
+
+Offline verification:
+
+```powershell
+cd backend
+.\gradlew.bat test --tests '*SportStats*Tests'
+cd ..\frontend
+npm test -- src/sportstatsSchedule.test.tsx
+npm run build
+```
+
+`backend/src/test/resources/sportstats/superliga-real-response.json` is a projection
+of the supplied real 16-match response, preserving every imported field, codes,
+scores, Unicode names, timestamps, periods and pagination metadata; unused
+events, TV, highlights and referee details are omitted. Tests also synthesize
+status changes, date changes, errors and separate phases from these rows. HTTP
+tests use a loopback server, never the real provider. Builds force automatic
+sync off even when the developer's environment enables it. Optional
+`TEST_SPORTSTATS_DATABASE_URL` and `TEST_DATABASE_USERNAME`/`TEST_DATABASE_PASSWORD`
+can run the same integration tests on a disposable PostgreSQL database; never
+point them at the application or production database.
+
 ## Verify predictions in PostgreSQL
 
 1. In the local Compose stack, sign in and save a score for a match whose kickoff
@@ -415,88 +542,75 @@ docker build -t super-pont-backend ./backend
 ```
 
 The multi-stage Dockerfile runs the wrapper build and tests, then copies only
-`app.jar` into a non-root Java 25 runtime. It sets a container memory limit for
-the Java heap and supports graceful shutdown.
+`app.jar` into a non-root Java 25 runtime. It limits the Java heap to a percentage of container memory and supports graceful shutdown.
 
-## Production variables
+## Hosted test deployment
 
-Set these in Render's Environment settings. Leave `SPRING_PROFILES_ACTIVE` unset,
-so local development defaults are disabled.
+See the complete [free deployment guide](docs/DEPLOY.md), checked against official
+provider documentation on 25 November 2026. It covers Neon, Render Docker, Vercel,
+Brevo HTTPS email, the first verified administrator, manual imports and hosted checks.
+No resources are created or published by these preparation changes.
 
-| Variable | Value |
-| --- | --- |
-| `DATABASE_URL` | `jdbc:postgresql://<neon-host>/<database>?sslmode=verify-full&sslfactory=org.postgresql.ssl.DefaultJavaSSLFactory&channelBinding=require` |
-| `DATABASE_USERNAME` | Neon database role |
-| `DATABASE_PASSWORD` | Neon role password, stored only in Render |
-| `FRONTEND_URL` | Exact frontend HTTPS origin, without a trailing slash or path |
-| `PASSWORD_RESET_FRONTEND_URL` | Optional frontend origin for password-reset emails; defaults to `FRONTEND_URL`. No trailing slash or path. |
-| `PORT` | Supplied by Render; defaults to 8080 |
-| `SESSION_COOKIE_SECURE` | Defaults to `true`. The local `dev` profile defaults to `false` for HTTP. |
-| `SESSION_COOKIE_SAME_SITE` | Defaults to `lax`. |
-| `AUTH_TRUSTED_PROXY_CIDRS` | Optional comma-separated CIDRs for explicitly trusted reverse proxies. By default, forwarding headers are ignored. |
+Use `SPRING_PROFILES_ACTIVE=prod` on Render. This profile excludes demo seeds,
+uses PostgreSQL for logo bytes and disables both automatic match and logo imports.
+SMTP ports are blocked on Render Free; use `MAIL_PROVIDER=brevo` and secrets only
+in Render's environment. Local Compose continues to use Mailpit and the logo volume.
 
-The database URL must be JDBC format, not a `postgresql://user:password@...` URI.
-Keep credentials in the separate variables. PostgreSQL TLS verifies the server
-certificate and hostname using the JRE's trusted CA store. The backend limits its connection pool to five.
-`GET /actuator/health` is public and checks database health without exposing details.
-The server binds to `0.0.0.0` and honors Render's port.
+For the default free domains, route `/api` through Vercel to Render using
+`frontend/vercel.json`. Configure its destination with
+`backend/scripts/Configure-Vercel.ps1 -BackendUrl https://<service>.onrender.com`.
+On Vercel set `VITE_API_URL` to the stable **frontend** HTTPS origin in this proxy
+setup; local development still uses `http://localhost:8080`. Cookies remain
+HttpOnly, Secure and SameSite=Lax with the existing session CSRF protection.
+The guide includes a free Render Static Site alternative for Vercel Hobby restrictions.
 
-Set `VITE_API_URL` in Vercel to the public HTTPS origin of the Render backend.
-Vite embeds it at build time, so changing it requires a rebuild.
-All `VITE_*` values are public browser configuration: never put secrets there.
-A missing API URL fails the frontend build.
+## Team logos (SportStats integration)
 
-For production sign-in, configure HTTPS custom domains on the same site, such
-as `app.example.com` on Vercel and `api.example.com` on Render. Point
-`VITE_API_URL` and `FRONTEND_URL` at those origins. The default Vercel and Render
-hostnames are cross-site. Setting `SESSION_COOKIE_SAME_SITE=none` with Secure
-cookies allows cross-site sessions only in browsers that accept third-party
-cookies for that deployment.
+Local filesystem storage remains the default outside `prod`; hosted `prod` stores validated PNG bytes in PostgreSQL through migration V14. Automatic logo checks default to off; run the manual script when needed.
 
-The authentication rate limiter uses in-memory counters per backend instance.
-See the [API guide](backend/README.md#authentication-rate-limits) for proxy
-configuration and limits when deploying multiple instances.
+Imported teams keep their existing UUIDs. Logos are matched by the provider's
+team identity, never by their name or by the demo data. The real catalog currently
+returns `code`, `logo_url` and `logo_thumb_url`; its numeric `id` is optional.
+The documented `/soccer/teams/{id}/logo` route is used only if the catalog actually
+supplies a numeric ID. A match code such as `t1nc` is never substituted for that ID.
+See the [team catalog](https://sportstatsapi.com/docs/api/soccer-teams/) and
+[logo endpoint](https://sportstatsapi.com/docs/api/soccer-teams-id-logo/).
 
-## Deployment instructions (when ready)
+Start or update the local backend (Flyway applies V13 automatically):
 
-1. **Neon:** create a Free project and PostgreSQL database, preferably near the
-   chosen Render region. Open **Connect**, select Java/JDBC, and record the
-   host, database, role, and password privately. A pooled Neon hostname is supported.
-   Use the JDBC URL format and TLS options above.
-2. **Vercel project setup:** import the repository, set **Root Directory** to
-   `frontend`, framework to **Vite**, Node.js to **22.x**, install command to
-   `npm ci`, build command to `npm run build`, and output directory to `dist`.
-   Identify the stable production domain for the backend's `FRONTEND_URL`.
-   If deploying the frontend first to obtain that domain, update its API URL and
-   redeploy after the backend exists.
-3. **Render:** create a **Web Service** from the repository, runtime **Docker**,
-   **Root Directory** `backend`, **Dockerfile Path** `./Dockerfile`, Docker build
-   context `.`, and instance type **Free**. Set the four required variables in
-   the table. Set **Health Check Path** to `/actuator/health`. Use the Dockerfile
-   entrypoint; no separate start/build command is needed.
-4. **Vercel:** set `VITE_API_URL` for Production to the Render HTTPS origin,
-   then deploy/redeploy. `frontend/vercel.json` provides history fallback to
-   `index.html`; Vercel serves existing static assets normally. The scaffold
-   has no router dependency, but the fallback supports future client-side routes.
-5. Verify backend health returns HTTP 200 and `status: UP`, then load the
-   frontend. Requests from the configured frontend must receive
-   `Access-Control-Allow-Origin` matching that exact origin.
+```powershell
+Set-Location D:\Alisa\super-pont
+podman compose up -d --force-recreate backend
+.\backend\scripts\Sync-TeamLogos.ps1 -Email admin@example.test
+```
 
-CORS accepts a single exact frontend origin. Wildcard Vercel preview domains
-are not enabled; previews need a separately configured backend to use another origin.
-Keep real credentials in provider dashboards and ignored local `.env` files.
-These preparation changes do not deploy or push anything.
+The script asks for the administrator password securely. It authenticates using
+the existing session and CSRF flow, then prints downloaded/cached/missing/error
+counts. No provider key is entered in the script. Add `-Force` to refresh existing
+images; server-side Retry-After and per-team failure cooldowns still apply.
 
-## Free plan constraints
+The existing `SPORTSTATS_API_KEY` stays in the ignored root `.env`, backend only.
+`TEAM_LOGO_AUTOMATIC_ENABLED=true` checks missing imported logos every
+`TEAM_LOGO_CHECK_INTERVAL=PT5M` while the backend runs, starting one minute after
+startup. Successfully cached logos are not downloaded again by this check or by
+match synchronization. This is independent from `SPORTSTATS_SYNC_ENABLED`, which
+still defaults to false. Set `TEAM_LOGO_AUTOMATIC_ENABLED=false` for manual only.
 
-[Render Free](https://render.com/docs/free) sleeps after 15 minutes without inbound
-traffic and can take about a minute to wake. It has monthly resource limits;
-Render recommends paid instances for workloads requiring production availability.
-[Vercel Hobby](https://vercel.com/docs/plans/hobby) is for personal, non-commercial use.
-Check [Neon's current plans](https://neon.com/pricing) for storage and compute quotas.
-This configuration supports a personal project within those limits; it does not
-guarantee an always-on or universally free commercial deployment.
+Compose mounts the named `team_logo_cache` volume at `/var/lib/super-pont/logos`.
+It survives backend/container recreation and ordinary `compose down/up`; removing
+volumes with `down -v` removes it. Outside Compose, configure a persistent writable
+`TEAM_LOGO_CACHE_DIR` (default `./.local-cache/team-logos` relative to the backend
+working directory). Retain both PostgreSQL metadata and this volume in backups.
 
-References: [Vite on Vercel](https://vercel.com/docs/frameworks/frontend/vite),
-[Neon connections](https://neon.com/docs/connect/connect-from-any-app),
-[Gradle compatibility](https://docs.gradle.org/9.1.0/userguide/compatibility.html).
+Only HTTPS images on the provider's image host, under its soccer-logo path, are
+accepted. Redirects are disabled; requests to that CDN never contain the API key.
+PNG/JPEG/WebP images are decoded, limited to 2 MiB and 2048×2048/4 million pixels,
+then stored as transparent-capable PNGs using immutable SHA-256 filenames. SVG
+and other types are rejected. The source URL, numeric ID if supplied, and credit
+remain in PostgreSQL; frontend DTOs contain only our backend URL and credit.
+
+Missing/404 logos are checked again after 24 hours, other per-image failures after
+an hour; provider Retry-After blocks both logo and match synchronization. Old images
+survive failed updates. Images are served from the configured cache without upstream calls at
+`GET /api/teams/{uuid}/logo?v={hash}` with ETag and public cache headers.
+Missing images use the existing badge. Supplied image credits appear with logos.

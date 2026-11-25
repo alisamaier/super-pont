@@ -56,13 +56,15 @@ function isRound(value: unknown): value is RoundView {
     Number.isInteger(value.number)
   );
 }
-function isTeam(value: unknown): value is TeamView {
+export function isTeam(value: unknown): value is TeamView {
   return (
     isRecord(value) &&
     isUuid(value.id) &&
     isUuid(value.countryId) &&
     typeof value.name === "string" &&
-    typeof value.shortName === "string"
+    typeof value.shortName === "string" &&
+    (value.logoUrl == null || typeof value.logoUrl === "string") &&
+    (value.logoCredit == null || typeof value.logoCredit === "string")
   );
 }
 function isMatch(value: unknown): value is MatchView {

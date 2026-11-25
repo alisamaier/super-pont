@@ -321,7 +321,7 @@ class LeaderboardApiTests {
             login(session, "demo_radu@leaderboard.example.test", "SuperPontDemo2026!");
             var ticket = get(session, publicPath(ANA));
             assertThat(ticket.get("displayName").asText()).isEqualTo("Ana");
-            assertThat(ticket.get("competitionName").asText()).isEqualTo("SuperLiga");
+            assertThat(ticket.get("competitionName").asText()).isEqualTo("SuperLiga DEMO");
             assertThat(ticket.get("totalPoints").asInt()).isEqualTo(18);
             assertThat(ticket.at("/predictions/totalElements").asInt()).isEqualTo(4);
             assertThat(ticket.at("/predictions/items")).extracting(row -> row.get("roundNumber").asInt())

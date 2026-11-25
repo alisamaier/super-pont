@@ -7,6 +7,8 @@ export const matchStatusLabels = {
   FINISHED: "Încheiat",
   POSTPONED: "Amânat",
   CANCELLED: "Anulat",
+  SUSPENDED: "Întrerupt",
+  UNKNOWN: "Statut neconfirmat",
 };
 
 export function matchdayLabel(round: Pick<RoundView, "number">) {
@@ -38,7 +40,7 @@ const monthDay = new Intl.DateTimeFormat("ro-RO", {
   month: "short",
 });
 
-function badge(team: TeamView): Team {
+export function badge(team: TeamView): Team {
   const colorIndex =
     Array.from(team.id).reduce(
       (hash, char) => (hash * 31 + char.charCodeAt(0)) >>> 0,

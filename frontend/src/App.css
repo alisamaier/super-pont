@@ -540,6 +540,33 @@ a svg {
   border: 1px solid currentColor;
   opacity: 0.5;
 }
+.team-emblem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  max-width: 100%;
+}
+.team-badge.has-logo {
+  background: transparent;
+  clip-path: none;
+  box-shadow: none;
+}
+.team-badge.has-logo::before { content: none; }
+.team-badge img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.team-logo-credit {
+  display: block;
+  font-size: 9px;
+  line-height: 1.3;
+  margin-top: 4px;
+  color: #8b98aa;
+  overflow-wrap: anywhere;
+}
 .team-badge span {
   font-family: "Barlow Condensed", sans-serif;
   font-size: 12px;
@@ -1738,3 +1765,11 @@ a svg {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.public-team-logos { display: flex; justify-content: space-between; gap: 16px; margin: 12px 0; }
+.public-team-logos:empty { display: none; }
+.saved-team { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.saved-team .team-emblem { max-width: 24px; }
+.saved-team .team-badge { width: 20px; height: 24px; }
+.saved-team .team-badge span { font-size: 6px; }
+.summary-logo-credits { font-size: 9px; line-height: 1.4; padding: 12px 20px; color: #8b98aa; overflow-wrap: anywhere; }
+.public-team-logos .team-emblem { max-width: 45%; }

@@ -9,6 +9,13 @@ import ro.superpont.football.team.model.Team;
 import java.util.*;
 
 public interface TeamRepository extends JpaRepository<Team, UUID> {
+    Optional<Team> findByProviderAndExternalId(String provider, String externalId);
+
+    List<Team> findByProviderOrderByExternalId(String provider);
+
+    @Query("select distinct s.competition.externalId from Season s join s.teams t where t.id in :ids and s.competition.provider = 'SPORTSTATS'")
+    List<String> findProviderLeagues(@Param("ids") Collection<UUID> ids);
+
     Page<Team> findByCountryId(UUID countryId, Pageable pageable);
 
     @Query("select t from Season s join s.teams t where s.id = :seasonId order by t.name")

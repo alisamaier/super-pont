@@ -8,6 +8,8 @@ import ro.superpont.football.match.model.Match;
 import java.util.*;
 
 public interface MatchRepository extends JpaRepository<Match, UUID> {
+    Optional<Match> findByProviderAndExternalId(String provider, String externalId);
+
     @Override
     @EntityGraph(attributePaths = {"homeTeam", "awayTeam"})
     Page<Match> findAll(Pageable pageable);

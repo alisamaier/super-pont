@@ -7,6 +7,8 @@ export interface Team {
   initials: string;
   color: string;
   accent: string;
+  logoUrl?: string | null;
+  logoCredit?: string | null;
 }
 
 export interface Fixture {

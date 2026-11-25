@@ -2,7 +2,7 @@ package ro.superpont.football.season.model;
 
 import jakarta.persistence.*;
 
-import ro.superpont.common.BaseEntity;
+import ro.superpont.common.ExternalEntity;
 import ro.superpont.football.competition.model.Competition;
 import ro.superpont.football.team.model.Team;
 
@@ -11,7 +11,7 @@ import java.util.*;
 
 @Entity
 @Table(name = "seasons")
-public class Season extends BaseEntity {
+public class Season extends ExternalEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "competition_id", nullable = false)
     private Competition competition;

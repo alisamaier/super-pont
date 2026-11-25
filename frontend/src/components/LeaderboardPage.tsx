@@ -22,7 +22,8 @@ export function LeaderboardPage({ currentUserId, page, onNavigate, onRedirect,
   onRedirect: (destination: string) => void;
   onNavigate: (event: MouseEvent<HTMLAnchorElement>, destination: string) => void;
 }) {
-  const selectedId = competitionId ?? competitions.find((item) => item.code === "RO-SUPERLIGA")?.id ?? "";
+  const selectedId = competitionId ?? competitions.find((item) => item.code === "SPORTSTATS-SUPERLIGA")?.id
+    ?? competitions.find((item) => item.code === "RO-SUPERLIGA")?.id ?? "";
   const seasons = useResource(selectedId || undefined, footballApi.seasons);
   const today = new Date(Date.now()).toISOString().slice(0, 10);
   const season = seasons.data?.find((item) => item.id === seasonId) ?? seasons.data

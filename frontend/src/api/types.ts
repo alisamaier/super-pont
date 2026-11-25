@@ -53,6 +53,8 @@ export interface TeamView {
   countryId: string;
   name: string;
   shortName: string;
+  logoUrl?: string | null;
+  logoCredit?: string | null;
 }
 
 export const matchStatuses = [
@@ -61,6 +63,8 @@ export const matchStatuses = [
   "FINISHED",
   "POSTPONED",
   "CANCELLED",
+  "SUSPENDED",
+  "UNKNOWN",
 ] as const;
 export type MatchStatus = (typeof matchStatuses)[number];
 

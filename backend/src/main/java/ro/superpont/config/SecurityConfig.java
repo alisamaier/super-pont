@@ -60,6 +60,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/auth/csrf", "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.HEAD, "/actuator/health/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/register", "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/admin/sportstats/sync", "/api/admin/sportstats/logos").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/auth/password-reset/request",
                                 "/api/auth/password-reset/validate", "/api/auth/password-reset/confirm").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/auth/registration").permitAll()

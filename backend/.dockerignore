@@ -2,6 +2,7 @@
 .gradle-user-home/
 build/
 target/
+.local-cache/
 .env
 .env.*
 !.env.example
